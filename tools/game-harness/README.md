@@ -24,8 +24,8 @@ The driver is installed only into the harness directories, never the user's norm
 ## Tours
 
 ```sh
-tools/game-harness/run.sh gl --run tools/game-harness/runs/ci-5990-deterministic/gl
-tools/game-harness/run.sh metal --dump --run tools/game-harness/runs/iteration-1/metal
+tools/game-harness/run.sh gl --preset small --run tools/game-harness/runs/ci-5990-deterministic/gl
+tools/game-harness/run.sh metal --preset small --dump --run tools/game-harness/runs/iteration-1/metal
 UV_CACHE_DIR=/tmp/iris-research/uv-cache uv run tools/game-harness/compare.py \
   tools/game-harness/runs/ci-5990-deterministic/gl tools/game-harness/runs/iteration-1/metal \
   --out tools/game-harness/runs/iteration-1/comparison
@@ -57,7 +57,7 @@ The driver refreshes Minecraft’s input timestamp to prevent the 60-second AFK 
 ## Live exploration
 
 ```sh
-tools/game-harness/run.sh metal --live
+tools/game-harness/run.sh metal --preset small --live
 python3 tools/game-harness/ctl.py tp -1000 64 260 90 10
 python3 tools/game-harness/ctl.py time 6000
 python3 tools/game-harness/ctl.py weather clear
@@ -92,3 +92,51 @@ normalized mean absolute difference, requires all seven scenes, and produces ful
 images, absolute differences amplified four times, `scores.json`, `report.md`, and `report.html`.
 
 For additional upstream reference diagnostics, `ctl.py gldump NAME` saves the GL shadow depth at the current viewpoint (GL only). `ctl.py glstages NAME` queues color/depth snapshots before deferred, after deferred, and after composite on the official GL pipeline; wait for a few frames before reading them. Native dump rows follow the backend texture convention, so these diagnostic images appear upside down relative to screenshots.
+
+## Native-resolution live bench (task 4)
+
+The default preset is now `real`: **2880×1864 framebuffer**, a 1440×932-point window,
+render distance 16, simulation distance 12, and Iris shadow distance 32. Every capture verifies
+the actual framebuffer size. `--preset small` preserves the task-3 1280×720 setup.
+
+```sh
+tools/game-harness/run.sh gl --preset real --profile --bench --iterations 1 \
+  --run tools/game-harness/runs/native-reference/gl
+tools/game-harness/run.sh metal --preset real --profile --pass-profile --bench \
+  --reference tools/game-harness/runs/native-reference/gl \
+  --run tools/game-harness/runs/native-live/metal
+```
+
+`--bench` repeats until stopped, or use `--iterations N`. Each scene captures its locked still
+view, then flies an eight-second sinusoidal path ±1.5 blocks with ±12° turns, returning to the
+same pose. Completed iterations keep separate screenshots, results and manifests in
+`iteration-NNN/`. `--reference` generates unmodified side-by-side and score reports after every
+iteration. Those reports require visual inspection; a score alone is not a realism decision.
+The process must be stopped before any build, then relaunched with a fresh run directory for
+changed jars. No hot-swapping is attempted.
+
+`--mode shaders` enables Complementary. `--mode disabled` keeps Iris installed with
+`enableShaders=false`. `--mode no-iris` removes Iris altogether, for plain mcopt Metal or vanilla
+GL plus Sodium. Use separate matching baselines for these modes. `--property key=value` accepts
+explicit mcopt/iris.metal experimental switches and records them in the manifest.
+
+The driver sets inactivity limiting to Minecraft's least restrictive `MINIMIZED` setting and
+refreshes the input timestamp, sets pause-on-focus-loss false, VSync off and the unlimited-FPS
+setting, and holds an NSProcessInfo activity token to prevent App Nap. It records focus,
+minimized/visible status, actual Cocoa occlusion, throttle reason and throttled-frame count.
+Throttled or hidden/minimized samples are invalid and must not count toward performance targets.
+An unfocused but visible window is permitted. Occlusion state is reported rather than guessed.
+The game remains muted (`soundCategory_master:0.0`).
+
+Stats include mean/p95 frame interval, FPS, 1% low (inverse mean of the slowest 1%), render-thread
+CPU time from ThreadMXBean, and renderFrame wall time. GPU command-buffer latency can exceed
+frame interval because Metal overlaps frames; it is not additive GPU work. GPU completion
+interval is reported separately. Native presentation pacing may display fewer frames than are
+rendered. GL timestamp queries returning zero are marked unavailable, not zero-cost GPU work.
+
+`--pass-profile` takes a separate 30-submit GPU counter batch after the normal timed window.
+It reports vertex and fragment intervals per render encoder, labeled by game or Iris pass.
+Merged opaque sky/terrain draws may share one encoder label. Stage intervals overlap and must
+not be summed into a frame-time total. It uses mcopt's native Metal counter sampling, and does
+not run simultaneously with `--trace N`. Live commands `passprofile 30`, `passstatus`, and
+`gpustats 300` are available when the corresponding profiling build/properties are active.

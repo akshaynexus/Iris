@@ -7,6 +7,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Minecraft.class)
 public class FrameMixin {
- @Inject(method="renderFrame", at=@At("HEAD")) private void lockPose(boolean tick, CallbackInfo ci) { Driver.lockPose(); }
- @Inject(method="renderFrame", at=@At("RETURN")) private void frame(boolean tick, CallbackInfo ci) { Driver.frame(); }
+ @Inject(method="renderFrame", at=@At("HEAD")) private void lockPose(boolean tick, CallbackInfo ci) { Driver.beginFrame(); Driver.lockPose(); harness.GpuProbe.begin(); }
+ @Inject(method="renderFrame", at=@At("RETURN")) private void frame(boolean tick, CallbackInfo ci) { harness.GpuProbe.end(); Driver.frame(); }
 }

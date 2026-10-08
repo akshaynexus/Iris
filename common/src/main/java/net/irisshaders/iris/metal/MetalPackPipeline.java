@@ -445,6 +445,7 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 		if (handles.isEmpty()) return;
 		long[] h2 = handles.stream().mapToLong(Long::longValue).toArray();
 		MetalBridge.renderBegin(enc, h2, colors.toArray(new float[0][]), 0, false, 0, w, h);
+		mcopt.metal.PassProfile.label(enc, "colortex clears");
 		handles.clear();
 		colors.clear();
 	}
@@ -462,7 +463,10 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 			}
 			// Shadows use forward depth. Runtime GL readback confirms clear 1 and nearest-surface selection.
 			MetalBridge.renderBegin(enc, this.shadowColors, clears, this.shadowDepth, true, 1.0f, this.shadowResolution, this.shadowResolution);
-			this.shadowRenderer.renderShadows(worldRenderer, playerCamera, renderState);
+			mcopt.metal.PassProfile.label(enc, "shadow opaque");
+			mcopt.metal.PassProfile.group("shadow");
+			try { this.shadowRenderer.renderShadows(worldRenderer, playerCamera, renderState); }
+			finally { mcopt.metal.PassProfile.group(""); }
             for (int i = 0; i < this.shadowColors.length; i++) {
                 var setting = settings.get(i);
                 if (setting != null && setting.getMipmap()) MetalBridge.generateMipmaps(enc, this.shadowColors[i]);
@@ -592,7 +596,15 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 				this.mipSampling.add(texture);
 			}
 		}
-		MetalBridge.renderBegin(enc, colors, null, 0, false, 0, width, height);
+		// Only a complete, unblended draw without fragment kills can discard prior color contents.
+        float[][] loads = null;
+        if (Boolean.getBoolean("iris.metal.fullscreenDontCare") && pass.blend == null && !pass.program.mayDiscard
+            && pass.viewport.scale() == 1 && pass.viewport.viewportX() == 0 && pass.viewport.viewportY() == 0) {
+            loads = new float[colors.length][];
+            java.util.Arrays.fill(loads, MetalBridge.DONT_CARE);
+        }
+        MetalBridge.renderBegin(enc, colors, loads, 0, false, 0, width, height);
+		mcopt.metal.PassProfile.label(enc, pass.program.name);
 		int viewportWidth = (int) (width * pass.viewport.scale());
 		int viewportHeight = (int) (height * pass.viewport.scale());
 		if (viewportWidth <= 0 || viewportHeight <= 0) return;

@@ -12,6 +12,7 @@ import java.util.Map;
  */
 final class MetalProgram {
 	final String name;
+	final boolean mayDiscard;
 	final PackCompiler.Program compiled;
 	final MetalUniforms uniforms;
 	private final mcopt.metal.PackProgram backend;
@@ -22,6 +23,7 @@ final class MetalProgram {
 
 	MetalProgram(long ctx, String name, String vertexGlsl, String fragmentGlsl, int[] outputRemap, Map<String, Integer> fixedBuffers) {
 		this.name = name;
+		this.mayDiscard = java.util.regex.Pattern.compile("\\b(?:discard|demote|gl_SampleMask)\\b").matcher(fragmentGlsl).find();
 		this.backend = new mcopt.metal.PackProgram(ctx, name, vertexGlsl, fragmentGlsl, outputRemap, fixedBuffers);
 		this.compiled = this.backend.compiled();
 		try {

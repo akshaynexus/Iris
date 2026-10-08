@@ -25,7 +25,10 @@ def copy_one(pattern, dest):
         raise RuntimeError(f'Expected one {pattern}, found {len(files)}')
     shutil.copy2(files[0], dest)
 
-def prepare(backend, run):
+def prepare(backend, run, mode, profile, trace, preset, properties):
+    real = preset == "real"
+    width, height = (2880, 1864) if real else (1280, 720)
+    render, simulation, shadow = (16, 12, 32) if real else (8, 5, 8)
     game = INSTANCES / f'IrisHarness-{backend}'
     game.mkdir(exist_ok=True)
     # This directory is owned by the harness; source instance is read-only here.
@@ -35,20 +38,21 @@ def prepare(backend, run):
         jar.unlink()
     copy_one('mods/fabric-api-*.jar', game / 'mods')
     copy_one('mods/sodium-*.jar', game / 'mods')
-    if backend == 'gl':
+    if backend == 'gl' and mode != 'no-iris':
         shutil.copy2(Path('/tmp/iris-research/iris-ci-latest-26.3.jar'), game / 'mods')
-    else:
+    elif backend == 'metal':
         shutil.copy2(REPO.parent / 'mcopt/dist/mcopt-0.2.0-alpha.2.jar', game / 'mods')
-        shutil.copy2(REPO / 'build/libs/iris-fabric-1.11.6-snapshot+mc26.3-local.jar', game / 'mods')
+        if mode != 'no-iris':
+            shutil.copy2(REPO / 'build/libs/iris-fabric-1.11.6-snapshot+mc26.3-local.jar', game / 'mods')
     shutil.copy2(HERE / 'driver/build/libs/iris-game-driver-1.0.0.jar', game / 'mods')
     copy_one('shaderpacks/ComplementaryReimagined_r5.9.3.zip', game / 'shaderpacks')
     # Do not copy pack .txt overrides: both use the pack's default profile.
     for p in (game / 'shaderpacks').glob('*.txt'):
         p.unlink()
-    (game / 'config/iris.properties').write_text('shaderPack=ComplementaryReimagined_r5.9.3.zip\nenableShaders=true\nenableDebugOptions=false\nmaxShadowRenderDistance=8\n')
+    (game / 'config/iris.properties').write_text(f'shaderPack=ComplementaryReimagined_r5.9.3.zip\nenableShaders={str(mode == "shaders").lower()}\nenableDebugOptions=false\nmaxShadowRenderDistance={shadow}\n')
     (game / 'config/mcopt.properties').write_text(f'mcopt.metal={str(backend == "metal").lower()}\n')
     opts = dict(line.split(':', 1) for line in (SOURCE / 'options.txt').read_text().splitlines() if ':' in line)
-    opts.update(renderDistance='8', simulationDistance='5', guiScale='2', fov='0.0', fullscreen='false', enableVsync='false', maxFps='260', pauseOnLostFocus='false', preferredGraphicsBackend='"opengl"' if backend == 'gl' else '"default"', onboardingAccessibilityFinished='true', joinedFirstServer='true',
+    opts.update(renderDistance=str(render), simulationDistance=str(simulation), inactivityFpsLimit='minimized', guiScale='2', fov='0.0', fullscreen='false', enableVsync='false', maxFps='260', pauseOnLostFocus='false', preferredGraphicsBackend='"opengl"' if backend == 'gl' else '"default"', onboardingAccessibilityFinished='true', joinedFirstServer='true',
                 soundCategory_master='0.0')  # muted: harness runs must not play over the user's music
     (game / 'options.txt').write_text(''.join(f'{k}:{v}\n' for k, v in opts.items()))
     template = HERE / 'runs/world-template'
@@ -81,7 +85,14 @@ def prepare(backend, run):
         result.append(item)
         i += 1
     result[1:1] = ['-Xms512m', '-Xmx4G', '-Dharness.enabled=true', '-Dharness.animationTime=60.0', '-Dharness.freezeTextures=true', f'-Dharness.output={run}', '-Dharness.port=47821', f'-Dmcopt.metal={str(backend == "metal").lower()}']
-    manifest = {'backend': backend, 'shader_animation_time': 60.0, 'camera_lock': True, 'texture_animation_frozen': True, 'game_dir': str(game), 'mods': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (game / 'mods').glob('*.jar')}, 'scenes': json.loads((HERE / 'scenes.json').read_text())}
+    result[1:1] = [f'-Dharness.width={width}', f'-Dharness.height={height}', f'-Dharness.renderDistance={render}', f'-Dharness.simulationDistance={simulation}']
+    if profile:
+        result[1:1] = ['-Dharness.gpuTimes=true', '-Dmcopt.metal.gpuTimes=true', '-Dmcopt.metal.stats=true']
+    if trace is not None: result.insert(1, f'-Dmcopt.metal.trace={trace}')
+    for prop in properties:
+        if not prop.startswith(('mcopt.', 'iris.metal.')) or '=' not in prop: raise ValueError('Only mcopt.* or iris.metal.* key=value properties are accepted')
+        result.insert(1, '-D'+prop)
+    manifest = {'properties': properties, 'preset': preset, 'framebuffer': [width,height], 'render_distance': render, 'simulation_distance': simulation, 'shadow_distance': shadow, 'mode': mode, 'profile': profile, 'trace': trace, 'backend': backend, 'shader_animation_time': 60.0, 'camera_lock': True, 'texture_animation_frozen': True, 'game_dir': str(game), 'mods': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (game / 'mods').glob('*.jar')}, 'scenes': json.loads((HERE / 'scenes.json').read_text())}
     (run / 'manifest.json').write_text(json.dumps(manifest, indent=2))
     return game, result
 
@@ -94,6 +105,16 @@ def checked(text):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('backend', choices=['gl', 'metal'])
+    parser.add_argument('--property', action='append', default=[])
+    parser.add_argument('--preset', choices=['small', 'real'], default='real')
+    parser.add_argument('--background', action='store_true', help='keep a 96-point noninteractive window edge visible on all Spaces')
+    parser.add_argument('--bench', action='store_true', help='repeat the tour with fixed local flight paths until stopped')
+    parser.add_argument('--iterations', type=int, default=0, help='bench iteration limit; 0 runs until quit')
+    parser.add_argument('--mode', choices=['shaders', 'disabled', 'no-iris'], default='shaders')
+    parser.add_argument('--profile', action='store_true')
+    parser.add_argument('--trace', type=int)
+    parser.add_argument('--pass-profile', action='store_true')
+    parser.add_argument('--reference', type=Path, help='same-settings GL run for each bench iteration realism comparison')
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--dump', action='store_true')
     parser.add_argument('--run', type=Path)
@@ -110,7 +131,10 @@ def main():
         run = (args.run or HERE / 'runs' / time.strftime('%Y%m%d-%H%M%S') / args.backend).resolve()
         run.mkdir(parents=True, exist_ok=True)
         if (run / 'manifest.json').exists(): raise RuntimeError('Run directory already used; choose a fresh path')
-        game, argv = prepare(args.backend, run)
+        game, argv = prepare(args.backend, run, args.mode, args.profile, args.trace, args.preset, args.property)
+        manifest = json.loads((run/'manifest.json').read_text()); manifest['background'] = args.background
+        (run/'manifest.json').write_text(json.dumps(manifest,indent=2))
+        if args.background: argv.insert(1, '-Dharness.background=true')
         print(f'Launching {args.backend}: {run}', flush=True)
         status = {'backend': args.backend, 'ok': False}
         with (run / 'console.log').open('w') as log:
@@ -150,27 +174,65 @@ def main():
                     print('Live control ready on 127.0.0.1:47821', flush=True)
                     proc.wait()
                 else:
-                    results = {}
-                    for scene in json.loads((HERE / 'scenes.json').read_text()):
-                        checked('tp ' + ' '.join(map(str, scene['position'] + [scene['yaw'], scene['pitch']])))
-                        checked(f"time {scene['time']}"); checked(f"weather {scene['weather']}")
-                        checked(f"wait frames {scene['warmup_frames']}")
-                        checked('resetstats'); checked(f"wait frames {scene['sample_frames']}")
-                        stats = checked(f"stats {scene['sample_frames']}")
-                        if stats['throttle'] != 'NONE': raise RuntimeError('Frame limiter active: ' + stats['throttle'])
-                        capture = checked('screenshot ' + scene['name'])
-                        pose = checked('position')
-                        if abs(pose['yaw'] - scene['yaw']) > .01 or abs(pose['pitch'] - scene['pitch']) > .01:
-                            raise RuntimeError('Camera pose changed during capture: ' + str(pose))
-                        results[scene['name']] = {'stats': stats, 'screenshot': capture, 'pose': pose}
-                        if args.dump and args.backend == 'metal':
-                            results[scene['name']]['dump'] = checked('dump ' + scene['name'])
-                            deadline = time.monotonic() + 120
-                            while not checked('dumpstatus')['complete']:
-                                if time.monotonic() > deadline: raise RuntimeError('Dump did not finish within 120s')
-                                time.sleep(.5)
-                        (run / 'results.json').write_text(json.dumps(results, indent=2))
-                        print(scene['name'], stats, flush=True)
+                    iteration = 0
+                    while True:
+                        results = {}
+                        for scene in json.loads((HERE / 'scenes.json').read_text()):
+                            checked('tp ' + ' '.join(map(str, scene['position'] + [scene['yaw'], scene['pitch']])))
+                            checked(f"time {scene['time']}"); checked(f"weather {scene['weather']}")
+                            checked(f"wait frames {scene['warmup_frames']}")
+                            while True:
+                                checked('resetstats'); checked(f"wait frames {scene['sample_frames']}")
+                                stats = checked(f"stats {scene['sample_frames']}")
+                                if args.profile: stats['gpu'] = checked(f"gpustats {scene['sample_frames']}")
+                                valid = stats.get('valid',True) and not stats['window']['iconified'] and stats['window']['visible'] and stats['window'].get('cocoa_visible',False) and stats['throttle']=='NONE'
+                                if valid: break
+                                with (run/'discarded-samples.jsonl').open('a') as discarded:
+                                    discarded.write(json.dumps({'scene':scene['name'],'stats':stats})+'\n')
+                                if not args.bench: raise RuntimeError('Discarded throttled/occluded sample: '+str(stats))
+                                print('Discarded sample; waiting for a visible, unthrottled window',scene['name'],stats['window'],flush=True)
+                                checked('wait frames 60')
+                            capture = checked('screenshot ' + scene['name'])
+                            pose = checked('position')
+                            expected = [2880,1864] if args.preset == 'real' else [1280,720]
+                            if [pose['width'],pose['height']] != expected: raise RuntimeError('Framebuffer mismatch: '+str(pose))
+                            if abs(pose['yaw'] - scene['yaw']) > .01 or abs(pose['pitch'] - scene['pitch']) > .01:
+                                raise RuntimeError('Camera pose changed during capture: ' + str(pose))
+                            results[scene['name']] = {'stats': stats, 'screenshot': capture, 'pose': pose}
+                            if args.dump and args.backend == 'metal':
+                                results[scene['name']]['dump'] = checked('dump ' + scene['name'])
+                                deadline = time.monotonic() + 120
+                                while not checked('dumpstatus')['complete']:
+                                    if time.monotonic() > deadline: raise RuntimeError('Dump did not finish within 120s')
+                                    time.sleep(.5)
+                            if args.pass_profile and args.backend == 'metal':
+                                checked('passprofile 30')
+                                while True:
+                                    passes = checked('passstatus')
+                                    if passes['complete']: break
+                                    time.sleep(.25)
+                                results[scene['name']]['passes'] = passes
+                            if args.bench:
+                                checked('resetstats')
+                                checked('flight 8 1.5 12')
+                                results[scene['name']]['flight_stats'] = checked('stats 6000')
+                                if args.profile: results[scene['name']]['flight_stats']['gpu'] = checked('gpustats 600')
+                                flight = results[scene['name']]['flight_stats']
+                                flight['valid'] = flight.get('valid',True) and flight['throttle']=='NONE' and not flight['window']['iconified'] and flight['window']['visible'] and flight['window'].get('cocoa_visible',False)
+                                if not flight['valid']: flight['discard_reason'] = 'Throttled or hidden/minimized sample; excluded from performance conclusions'
+                            (run / 'results.json').write_text(json.dumps(results, indent=2))
+                            print(scene['name'], stats, flush=True)
+                        if not args.bench: break
+                        saved = run / f'iteration-{iteration:03d}'
+                        saved.mkdir(exist_ok=True)
+                        shutil.copy2(run / 'results.json', saved / 'results.json')
+                        shutil.copytree(run / 'screenshots', saved / 'screenshots')
+                        shutil.copy2(run / 'manifest.json', saved / 'manifest.json')
+                        if args.reference:
+                            env = dict(os.environ, UV_CACHE_DIR='/tmp/iris-research/uv-cache')
+                            subprocess.run(['uv','run',str(HERE/'compare.py'),str(args.reference.resolve()),str(saved),'--out',str(saved/'comparison')],check=True,env=env)
+                        iteration += 1
+                        if args.iterations and iteration >= args.iterations: break
                     checked('quit'); proc.wait(timeout=30)
                 status['ok'] = proc.returncode == 0
             except BaseException as e:

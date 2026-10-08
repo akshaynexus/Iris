@@ -27,6 +27,11 @@ if gl_manifest.get('texture_animation_frozen') != metal_manifest.get('texture_an
     raise SystemExit('Atlas animation settings differ; rerun with matching harness settings')
 if gl_manifest.get('camera_lock') != metal_manifest.get('camera_lock'):
     raise SystemExit('Camera locking differs; rerun with matching harness settings')
+for key in ('framebuffer','render_distance','simulation_distance','shadow_distance'):
+    if gl_manifest.get(key) != metal_manifest.get(key):
+        raise SystemExit(f'Mismatched {key}; refusing misleading comparison')
+if (gl_manifest.get('mode','shaders') == 'shaders') != (metal_manifest.get('mode','shaders') == 'shaders'):
+    raise SystemExit('Shader-enabled state differs')
 if gl_manifest['scenes'] != metal_manifest['scenes']:
     raise SystemExit('Scene definitions differ; refusing comparison')
 expected = [s['name'] for s in gl_manifest['scenes']]
