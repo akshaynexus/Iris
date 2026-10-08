@@ -37,7 +37,7 @@ The imported shader-pack files retain LGPL-3.0 attribution and a license copy in
 - Gbuffer color writes preserve the game's channel mask. Pack blend overrides remain mapped by logical target.
 - Shadow aliases follow IrisSamplers' watershadow rule. Runtime comparison samplers honor nearest/linear filtering
   and use the bound GL sampler's LEQUAL operation, rather than a hard-coded constexpr GEQUAL sampler.
-- World reverse-Z and zero-to-one transforms remain paired. Shadow clear/test handling remains separate.
+- World reverse-Z and zero-to-one transforms remain paired. Shadows use forward depth: clear 1, invert the game depth comparison, and retain LEQUAL sampling. Live GL readback established this; the earlier inferred clear-0/GEQUAL description was incorrect. Sodium shadow transforms receive the shadow flag.
 
 ## Verification and limitations
 
@@ -49,8 +49,7 @@ Run `spike/harness/run` from this repo. It uses `cp.txt`, tests all 99 patched C
 mcopt's public API, then performs native GPU readback tests. A Metal device must be accessible (the filesystem
 sandbox can prevent that). The shader pack remains Complementary Reimagined r5.9.3 with the default profile.
 
-No Minecraft or CurseForge launch is part of this task. Compilation and small GPU tests do not prove image parity.
-The later game test must compare sky, shadows, translucency, depth effects, and center-depth smoothing with GL.
+Task 3 adds the real Minecraft harness in `tools/game-harness/`; see its README and [report](CODEX-REPORT-3.md). The reference is official Iris CI build 5990, not the older release. Compilation and small GPU tests alone do not prove image parity; the harness records unmodified screenshots, frame times, and intermediate buffer dumps. Camera poses, shader time, and atlas animation phase are synchronized only in harness runs. Normal gameplay retains animation.
 
 Remaining constraints: no geometry/tessellation, compute/SSBO/images or shadowcomp execution; no DH integration;
 custom raw/3D/array textures and resource-pack PBR tracking are incomplete. Shadow depth mipmaps need a shader
