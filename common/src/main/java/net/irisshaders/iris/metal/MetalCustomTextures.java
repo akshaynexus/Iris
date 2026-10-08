@@ -41,20 +41,25 @@ final class MetalCustomTextures {
 
 	MetalCustomTextures(long ctx, ShaderPack pack) {
 		this.ctx = ctx;
-		pack.getCustomTextureDataMap().forEach((stage, map) -> {
-			Map<String, Source> sources = new HashMap<>();
-			map.forEach((name, data) -> {
-				Source s = load(name, data);
-				if (s != null) sources.put(name, s);
+		try {
+			pack.getCustomTextureDataMap().forEach((stage, map) -> {
+				Map<String, Source> sources = new HashMap<>();
+				map.forEach((name, data) -> {
+					Source s = load(name, data);
+					if (s != null) sources.put(name, s);
+				});
+				this.staged.put(stage, sources);
 			});
-			this.staged.put(stage, sources);
-		});
-		pack.getIrisCustomTextureDataMap().forEach((name, data) -> {
-			Source s = load(name, data);
-			if (s != null) this.named.put(name, s);
-		});
-		CustomTextureData noiseData = pack.getCustomNoiseTexture();
-		this.noise = noiseData == null ? null : load("noisetex", noiseData);
+			pack.getIrisCustomTextureDataMap().forEach((name, data) -> {
+				Source s = load(name, data);
+				if (s != null) this.named.put(name, s);
+			});
+			CustomTextureData noiseData = pack.getCustomNoiseTexture();
+			this.noise = noiseData == null ? null : load("noisetex", noiseData);
+		} catch (RuntimeException | Error e) {
+			destroy();
+			throw e;
+		}
 	}
 
 	/** The pack's texture for a sampler name in a stage, or null to use the pipeline's own binding. */
@@ -80,8 +85,8 @@ final class MetalCustomTextures {
 			if (data instanceof CustomTextureData.PngData png) {
 				NativeImage image = NativeImage.read(png.getContent());
 				DynamicTexture texture = new DynamicTexture(() -> "iris:metal_custom_" + name, image);
-				texture.upload();
 				this.owned.add(texture);
+				texture.upload();
 				TextureFilteringData f = png.getFilteringData();
 				long handle = MetalBridge.textureHandle(texture.getTexture());
 				return new Source(() -> handle, sampler(f.shouldBlur(), f.shouldClamp()));

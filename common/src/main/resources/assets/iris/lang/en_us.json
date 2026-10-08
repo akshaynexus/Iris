@@ -1,4 +1,10 @@
 {
+  "iris.backend.switch": "Switch",
+  "iris.backend.return": "Return",
+  "iris.backend.metal.switch": "Shader packs in this build run on Metal. Switch to Metal? This will close your game.",
+  "iris.backend.metal.unsupported": "Shader packs in this build run on Metal. This computer cannot run mcopt Metal. Apple Silicon, arm64 Java, and macOS 26 or later are required.",
+  "iris.backend.metal.saveFailed": "Could not save the Metal backend setting. Check the log and config folder permissions, then try again.",
+  "iris.backend.metal.active": "[Iris] Shader pack on Metal (mcopt)",
   "iris.shaders.reloaded": "Shaders Reloaded!",
   "iris.shaders.disabled": "Shaders disabled!",
   "iris.shaders.toggled": "Toggled shaders to %s!",

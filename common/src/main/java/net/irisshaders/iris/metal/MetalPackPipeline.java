@@ -82,15 +82,15 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 	private final FrameUpdateNotifier updateNotifier = new FrameUpdateNotifier();
 	final CustomUniforms customUniforms;
 	final long ctx;
-	final MetalTargets targets;
-	private final MetalGbuffers gbuffers;
-	private final MetalCustomTextures custom;
+	MetalTargets targets;
+	private MetalGbuffers gbuffers;
+	private MetalCustomTextures custom;
 	/** Buffers the composite stage writes: the final pass's custom textures don't replace them. */
 	private final Set<Integer> compositeWritten = new HashSet<>();
 	/** The shadow pass (null when the pack has none): Iris's ShadowRenderer, drawing through MetalGbuffers' redirect. */
-	private final @org.jspecify.annotations.Nullable ShadowRenderer shadowRenderer;
+	private @org.jspecify.annotations.Nullable ShadowRenderer shadowRenderer;
 	final int shadowResolution;
-	/** Shadow depth cleared to 0 with the GL shadow compare convention, its pre-translucent copy, and shadowcolor0..1. */
+	/** Forward shadow depth cleared to 1, matching the observed GL runtime, its pre-translucent copy, and shadowcolor0..1. */
 	long shadowDepth, shadowDepthNoTranslucents;
 	final long[] shadowColors = new long[2];
 	final int[] shadowColorFormats = new int[2];
@@ -100,18 +100,18 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 	private final List<Pass> begin, prepare, deferred, composite;
 	private final Pass finalPass;
 	private final Pass centerDepthPass;
-	private final long centerDepth, centerDepthAlt;
+	private long centerDepth, centerDepthAlt;
 	private boolean centerDepthUsed, centerDepthSampled;
 	private final ImmutableSet<Integer> flippedBeforeShadow, flippedAfterPrepare, flippedAfterTranslucent, flippedAtEnd;
 	private final List<Integer> swaps = new ArrayList<>();
-	private final DynamicTexture white, noise, defaultNormal, defaultSpecular;
-	private final GpuTexture shadowDepthDummy;
-	private final long linearClamp, nearestClamp, linearRepeat, linearMipClamp;
+	private DynamicTexture white, noise, defaultNormal, defaultSpecular;
+	private GpuTexture shadowDepthDummy;
+	private long linearClamp, nearestClamp, linearRepeat, linearMipClamp;
 	private final long[] shadowRawSamplers = new long[2], shadowCompareSamplers = new long[2];
-	private final long alwaysDepth;
-	private final long quad;
+	private long alwaysDepth;
+	private long quad;
 	private final Set<Long> mipSampling = new HashSet<>();
-	private final net.irisshaders.iris.pathways.HorizonRenderer horizonRenderer = new net.irisshaders.iris.pathways.HorizonRenderer();
+	private net.irisshaders.iris.pathways.HorizonRenderer horizonRenderer;
 	private final Set<String> warned = new HashSet<>();
 	private WorldRenderingPhase phase = WorldRenderingPhase.NONE, overridePhase;
 	private boolean fullClearPending = true;
@@ -143,139 +143,146 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 		this.ctx = MetalBridge.ctx();
 		this.customUniforms = programSet.getPack().customUniforms.build(
 			holder -> CommonUniforms.addNonDynamicUniforms(holder, programSet.getPack().getIdMap(), this.directives, this.updateNotifier));
-		this.targets = new MetalTargets(this.ctx, this.directives);
-		this.custom = new MetalCustomTextures(this.ctx, programSet.getPack());
+		try {
+			this.horizonRenderer = new net.irisshaders.iris.pathways.HorizonRenderer();
+			this.targets = new MetalTargets(this.ctx, this.directives);
+			this.custom = new MetalCustomTextures(this.ctx, programSet.getPack());
 
-		this.linearClamp = MetalBridge.samplerNew(this.ctx, 0, 0, 1, 1, 0, Float.MAX_VALUE);
-		this.nearestClamp = MetalBridge.samplerNew(this.ctx, 0, 0, 0, 0, 0, Float.MAX_VALUE);
-		this.linearRepeat = MetalBridge.samplerNew(this.ctx, 2, 2, 1, 1, 0, Float.MAX_VALUE);
-		this.linearMipClamp = MetalBridge.samplerNew(this.ctx, 0, 0, 1, 1, 2, Float.MAX_VALUE);
-		this.alwaysDepth = MetalBridge.depthStateNew(this.ctx, 7, false);
+			this.linearClamp = MetalBridge.samplerNew(this.ctx, 0, 0, 1, 1, 0, Float.MAX_VALUE);
+			this.nearestClamp = MetalBridge.samplerNew(this.ctx, 0, 0, 0, 0, 0, Float.MAX_VALUE);
+			this.linearRepeat = MetalBridge.samplerNew(this.ctx, 2, 2, 1, 1, 0, Float.MAX_VALUE);
+			this.linearMipClamp = MetalBridge.samplerNew(this.ctx, 0, 0, 1, 1, 2, Float.MAX_VALUE);
+			this.alwaysDepth = MetalBridge.depthStateNew(this.ctx, 7, false);
 
-		this.white = singleColor(1, 1, 0xFFFFFFFF);
-		// What GL Iris binds for normals/specular without a PBR resource pack: a flat normal, no specular.
-		this.defaultNormal = new net.irisshaders.iris.targets.backed.NativeImageBackedSingleColorTexture(net.irisshaders.iris.pbr.texture.PBRType.NORMAL.getDefaultValue());
-		this.defaultSpecular = new net.irisshaders.iris.targets.backed.NativeImageBackedSingleColorTexture(net.irisshaders.iris.pbr.texture.PBRType.SPECULAR.getDefaultValue());
-		this.defaultNormal.upload();
-		this.defaultSpecular.upload();
-		this.noise = noiseTexture(this.directives.getNoiseTextureResolution());
-		this.shadowDepthDummy = com.mojang.blaze3d.systems.RenderSystem.getDevice().createTexture("iris:metal_shadow_dummy",
-			GpuTexture.USAGE_TEXTURE_BINDING | GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_COPY_DST, com.mojang.renderpearl.api.GpuFormat.D32_FLOAT, 1, 1, 1, 1);
-		com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder().clearDepthTexture(this.shadowDepthDummy, 1.0);
+			this.white = singleColor(1, 1, 0xFFFFFFFF);
+			// What GL Iris binds for normals/specular without a PBR resource pack: a flat normal, no specular.
+			this.defaultNormal = new net.irisshaders.iris.targets.backed.NativeImageBackedSingleColorTexture(net.irisshaders.iris.pbr.texture.PBRType.NORMAL.getDefaultValue());
+			this.defaultSpecular = new net.irisshaders.iris.targets.backed.NativeImageBackedSingleColorTexture(net.irisshaders.iris.pbr.texture.PBRType.SPECULAR.getDefaultValue());
+			this.defaultNormal.upload();
+			this.defaultSpecular.upload();
+			this.noise = noiseTexture(this.directives.getNoiseTextureResolution());
+			this.shadowDepthDummy = com.mojang.blaze3d.systems.RenderSystem.getDevice().createTexture("iris:metal_shadow_dummy",
+				GpuTexture.USAGE_TEXTURE_BINDING | GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_COPY_DST, com.mojang.renderpearl.api.GpuFormat.D32_FLOAT, 1, 1, 1, 1);
+			com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder().clearDepthTexture(this.shadowDepthDummy, 1.0);
 
-		// Two triangles over the screen: position (0..1) and uv, as Iris's composite vertex shaders expect.
-		float[] v = {0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1};
-		this.quad = MetalBridge.newBuffer(this.ctx, v.length * 4L);
-		long at = MetalBridge.bufferContents(this.quad);
-		for (int i = 0; i < v.length; i++) MemoryUtil.memPutFloat(at + i * 4L, v[i]);
+			// Two triangles over the screen: position (0..1) and uv, as Iris's composite vertex shaders expect.
+			float[] v = {0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1};
+			this.quad = MetalBridge.newBuffer(this.ctx, v.length * 4L);
+			long at = MetalBridge.bufferContents(this.quad);
+			for (int i = 0; i < v.length; i++) MemoryUtil.memPutFloat(at + i * 4L, v[i]);
 
-		BufferFlipper flipper = new BufferFlipper();
-		this.begin = passes(ProgramArrayId.Begin, TextureStage.BEGIN, flipper, "begin_pre");
-		this.flippedBeforeShadow = flipper.snapshot();
-		this.prepare = passes(ProgramArrayId.Prepare, TextureStage.PREPARE, flipper, "prepare_pre");
-		this.flippedAfterPrepare = flipper.snapshot();
-		this.deferred = passes(ProgramArrayId.Deferred, TextureStage.DEFERRED, flipper, "deferred_pre");
-		this.flippedAfterTranslucent = flipper.snapshot();
-		this.composite = passes(ProgramArrayId.Composite, TextureStage.COMPOSITE_AND_FINAL, flipper, "composite_pre");
-		this.flippedAtEnd = flipper.snapshot();
+			BufferFlipper flipper = new BufferFlipper();
+			this.begin = passes(ProgramArrayId.Begin, TextureStage.BEGIN, flipper, "begin_pre");
+			this.flippedBeforeShadow = flipper.snapshot();
+			this.prepare = passes(ProgramArrayId.Prepare, TextureStage.PREPARE, flipper, "prepare_pre");
+			this.flippedAfterPrepare = flipper.snapshot();
+			this.deferred = passes(ProgramArrayId.Deferred, TextureStage.DEFERRED, flipper, "deferred_pre");
+			this.flippedAfterTranslucent = flipper.snapshot();
+			this.composite = passes(ProgramArrayId.Composite, TextureStage.COMPOSITE_AND_FINAL, flipper, "composite_pre");
+			this.flippedAtEnd = flipper.snapshot();
 
-		this.finalPass = programSet.get(ProgramId.Final).map(source -> {
-			Pass pass = new Pass();
-			pass.name = source.getName();
-			pass.program = program(source, TextureStage.COMPOSITE_AND_FINAL);
-			pass.drawBuffers = new int[0];
-			pass.readsAlt = this.flippedAtEnd;
-			pass.mipmapped = source.getDirectives().getMipmappedBuffers();
-			pass.stage = TextureStage.COMPOSITE_AND_FINAL;
-			pass.writtenBefore = Set.copyOf(this.compositeWritten);
-			return pass;
-		}).orElseGet(this::copyFinalPass);
+			this.finalPass = programSet.get(ProgramId.Final).map(source -> {
+				Pass pass = new Pass();
+				pass.name = source.getName();
+				pass.program = program(source, TextureStage.COMPOSITE_AND_FINAL);
+				pass.drawBuffers = new int[0];
+				pass.readsAlt = this.flippedAtEnd;
+				pass.mipmapped = source.getDirectives().getMipmappedBuffers();
+				pass.stage = TextureStage.COMPOSITE_AND_FINAL;
+				pass.writtenBefore = Set.copyOf(this.compositeWritten);
+				return pass;
+			}).orElseGet(this::copyFinalPass);
 
-        this.centerDepth = MetalBridge.newTexture(this.ctx, 55, 1, 1, 1, MetalTargets.USAGE);
-        this.centerDepthAlt = MetalBridge.newTexture(this.ctx, 55, 1, 1, 1, MetalTargets.USAGE);
-        this.centerDepthPass = new Pass();
-        this.centerDepthPass.name = "centerDepthSmooth";
-        try (var vs = MetalPackPipeline.class.getResourceAsStream("/centerDepth.vsh");
-             var fs = MetalPackPipeline.class.getResourceAsStream("/centerDepth.fsh")) {
-            String vertex = new String(java.util.Objects.requireNonNull(vs).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-                .replace("iris_Position", "Position");
-            String fragment = new String(java.util.Objects.requireNonNull(fs).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-                .replace("out float iris_fragColor;", "layout(location = 0) out float iris_fragColor;\nuniform int firstSample;")
-                .replace("if (isnan(oldDepth))", "if (firstSample != 0 || isnan(oldDepth))");
-            this.centerDepthPass.program = new MetalProgram(this.ctx, "centerDepthSmooth", vertex, fragment);
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
-        this.centerDepthPass.readsAlt = ImmutableSet.of();
-        this.centerDepthPass.mipmapped = ImmutableSet.of();
-        this.centerDepthPass.stage = TextureStage.COMPOSITE_AND_FINAL;
-        this.centerDepthPass.program.uniforms.uniform1i(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.PER_FRAME,
-            "firstSample", () -> this.centerDepthSampled ? 0 : 1);
-        this.centerDepthPass.program.uniforms.uniform1f(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.PER_FRAME,
-            "lastFrameTime", net.irisshaders.iris.uniforms.SystemTimeUniforms.TIMER::getLastFrameTime);
-        this.centerDepthPass.program.uniforms.uniform1f(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.ONCE,
-            "decay", () -> (float) (1.0 / ((this.directives.getCenterDepthHalfLife() * 0.1) / Math.log(2))));
-        this.centerDepthPass.program.uniforms.uniformMatrix(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.ONCE,
-            "projection", () -> new org.joml.Matrix4f(2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, -1, -1, 0, 1));
-        this.programs.add(this.centerDepthPass.program);
+	        this.centerDepth = MetalBridge.newTexture(this.ctx, 55, 1, 1, 1, MetalTargets.USAGE);
+	        this.centerDepthAlt = MetalBridge.newTexture(this.ctx, 55, 1, 1, 1, MetalTargets.USAGE);
+	        this.centerDepthPass = new Pass();
+	        this.centerDepthPass.name = "centerDepthSmooth";
+	        try (var vs = MetalPackPipeline.class.getResourceAsStream("/centerDepth.vsh");
+	             var fs = MetalPackPipeline.class.getResourceAsStream("/centerDepth.fsh")) {
+	            String vertex = new String(java.util.Objects.requireNonNull(vs).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+	                .replace("iris_Position", "Position");
+	            String fragment = new String(java.util.Objects.requireNonNull(fs).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+	                .replace("out float iris_fragColor;", "layout(location = 0) out float iris_fragColor;\nuniform int firstSample;")
+	                .replace("if (isnan(oldDepth))", "if (firstSample != 0 || isnan(oldDepth))");
+	            this.centerDepthPass.program = new MetalProgram(this.ctx, "centerDepthSmooth", vertex, fragment);
+	        } catch (java.io.IOException e) {
+	            throw new java.io.UncheckedIOException(e);
+	        }
+	        this.programs.add(this.centerDepthPass.program);
+	        this.centerDepthPass.readsAlt = ImmutableSet.of();
+	        this.centerDepthPass.mipmapped = ImmutableSet.of();
+	        this.centerDepthPass.stage = TextureStage.COMPOSITE_AND_FINAL;
+	        this.centerDepthPass.program.uniforms.uniform1i(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.PER_FRAME,
+	            "firstSample", () -> this.centerDepthSampled ? 0 : 1);
+	        this.centerDepthPass.program.uniforms.uniform1f(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.PER_FRAME,
+	            "lastFrameTime", net.irisshaders.iris.uniforms.SystemTimeUniforms.TIMER::getLastFrameTime);
+	        this.centerDepthPass.program.uniforms.uniform1f(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.ONCE,
+	            "decay", () -> (float) (1.0 / ((this.directives.getCenterDepthHalfLife() * 0.1) / Math.log(2))));
+	        this.centerDepthPass.program.uniforms.uniformMatrix(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.ONCE,
+	            "projection", () -> new org.joml.Matrix4f(2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, -1, -1, 0, 1));
 
-		for (List<Pass> list : List.of(this.begin, this.prepare, this.deferred, this.composite)) {
-			for (Pass pass : list) for (int i : pass.mipmapped) if (i >= 0 && i < MetalTargets.COUNT) this.targets.get(i).mipmapped = true;
-		}
-		if (this.finalPass != null) for (int i : this.finalPass.mipmapped) if (i >= 0 && i < MetalTargets.COUNT) this.targets.get(i).mipmapped = true;
 
-		var cleared = this.directives.getRenderTargetDirectives().getBuffersToBeCleared();
-		for (int i : this.flippedAtEnd) {
-			if (!cleared.contains(i)) this.swaps.add(i);
-		}
-		// What IrisRenderingPipeline sets for Sodium's meshing and the vertex formats (mc_Entity, at_tangent, ...).
-		WorldRenderingSettings.INSTANCE.setVertexFormat(FormatAnalyzer.createFormat(true, true, true, true));
-		WorldRenderingSettings.INSTANCE.setEntityIds(programSet.getPack().getIdMap().getEntityIdMap());
-		WorldRenderingSettings.INSTANCE.setItemIds(programSet.getPack().getIdMap().getItemIdMap());
-		WorldRenderingSettings.INSTANCE.setAmbientOcclusionLevel(this.directives.getAmbientOcclusionLevel());
-		WorldRenderingSettings.INSTANCE.setDisableDirectionalShading(shouldDisableDirectionalShading());
-		WorldRenderingSettings.INSTANCE.setUseSeparateAo(this.directives.shouldUseSeparateAo());
-		WorldRenderingSettings.INSTANCE.setBreaksAnisotropy(this.directives.breaksAnisotropy());
-		WorldRenderingSettings.INSTANCE.setVoxelizeLightBlocks(this.directives.shouldVoxelizeLightBlocks());
-		WorldRenderingSettings.INSTANCE.setSeparateEntityDraws(this.directives.shouldUseSeparateEntityDraws());
-
-		var shadowDirectives = this.directives.getShadowDirectives();
-		ProgramFallbackResolver resolver = new ProgramFallbackResolver(programSet);
-		this.shadowResolution = shadowDirectives.getResolution();
-        for (int i = 0; i < 2; i++) {
-            var settings = shadowDirectives.getDepthSamplingSettings().get(i);
-            int filter = settings.getNearest() ? 0 : 1;
-            int mip = settings.getMipmap() ? 2 : 0;
-            this.shadowRawSamplers[i] = MetalBridge.samplerNew(this.ctx, 0, 0, filter, filter, mip, Float.MAX_VALUE);
-            // GlSampler's bound comparison state overrides ShadowRenderer's texture state.
-            this.shadowCompareSamplers[i] = MetalBridge.comparisonSamplerNew(this.ctx, 0, 0, filter, filter, mip, Float.MAX_VALUE, 3);
-        }
-		if (resolver.has(ProgramId.Shadow) && shadowDirectives.isShadowEnabled().orElse(true)) {
-			if (shadowDirectives.getDepthSamplingSettings().stream().anyMatch(x -> x.getMipmap())) {
-                throw new IllegalStateException("Shadow depth mipmaps require a Metal depth reduction pass");
-            }
-            int usage = MetalTargets.USAGE;
-			this.shadowDepth = MetalBridge.newTexture(this.ctx, 252, this.shadowResolution, this.shadowResolution, 1, usage);
-			this.shadowDepthNoTranslucents = MetalBridge.newTexture(this.ctx, 252, this.shadowResolution, this.shadowResolution, 1, usage);
-			for (int i = 0; i < this.shadowColors.length; i++) {
-				var settings = shadowDirectives.getColorSamplingSettings().get(i);
-				this.shadowColorFormats[i] = MetalTargets.pixelFormat(settings != null ? settings.getFormat() : net.irisshaders.iris.gl.texture.InternalTextureFormat.RGBA);
-				this.shadowColors[i] = MetalBridge.newTexture(this.ctx, this.shadowColorFormats[i], this.shadowResolution, this.shadowResolution, settings != null && settings.getMipmap() ? 32 - Integer.numberOfLeadingZeros(this.shadowResolution) : 1, usage);
+			for (List<Pass> list : List.of(this.begin, this.prepare, this.deferred, this.composite)) {
+				for (Pass pass : list) for (int i : pass.mipmapped) if (i >= 0 && i < MetalTargets.COUNT) this.targets.get(i).mipmapped = true;
 			}
-			ShadowRenderer renderer = new ShadowRenderer(this, resolver.resolveNullable(ProgramId.ShadowSolid), this.directives, null, null, this.customUniforms, false);
-			renderer.metalPreTranslucentDepth = () -> {
-				Object encoder = encoder();
-				MetalBridge.blitTextureToTexture(MetalBridge.enc(encoder), this.shadowDepth, this.shadowDepthNoTranslucents, 0, this.shadowResolution, this.shadowResolution);
-			};
-			this.shadowRenderer = renderer;
-		} else {
-			this.shadowRenderer = null;
-		}
+			if (this.finalPass != null) for (int i : this.finalPass.mipmapped) if (i >= 0 && i < MetalTargets.COUNT) this.targets.get(i).mipmapped = true;
 
-		this.customUniforms.optimise();
-		this.gbuffers = new MetalGbuffers(this);
-		MetalHooks.setRedirector(this.gbuffers);
-		Iris.logger.info("Metal: shader pack pipeline ready, {} programs", this.programs.size());
+			var cleared = this.directives.getRenderTargetDirectives().getBuffersToBeCleared();
+			for (int i : this.flippedAtEnd) {
+				if (!cleared.contains(i)) this.swaps.add(i);
+			}
+			// What IrisRenderingPipeline sets for Sodium's meshing and the vertex formats (mc_Entity, at_tangent, ...).
+			WorldRenderingSettings.INSTANCE.setVertexFormat(FormatAnalyzer.createFormat(true, true, true, true));
+			WorldRenderingSettings.INSTANCE.setEntityIds(programSet.getPack().getIdMap().getEntityIdMap());
+			WorldRenderingSettings.INSTANCE.setItemIds(programSet.getPack().getIdMap().getItemIdMap());
+			WorldRenderingSettings.INSTANCE.setAmbientOcclusionLevel(this.directives.getAmbientOcclusionLevel());
+			WorldRenderingSettings.INSTANCE.setDisableDirectionalShading(shouldDisableDirectionalShading());
+			WorldRenderingSettings.INSTANCE.setUseSeparateAo(this.directives.shouldUseSeparateAo());
+			WorldRenderingSettings.INSTANCE.setBreaksAnisotropy(this.directives.breaksAnisotropy());
+			WorldRenderingSettings.INSTANCE.setVoxelizeLightBlocks(this.directives.shouldVoxelizeLightBlocks());
+			WorldRenderingSettings.INSTANCE.setSeparateEntityDraws(this.directives.shouldUseSeparateEntityDraws());
+
+			var shadowDirectives = this.directives.getShadowDirectives();
+			ProgramFallbackResolver resolver = new ProgramFallbackResolver(programSet);
+			this.shadowResolution = shadowDirectives.getResolution();
+	        for (int i = 0; i < 2; i++) {
+	            var settings = shadowDirectives.getDepthSamplingSettings().get(i);
+	            int filter = settings.getNearest() ? 0 : 1;
+	            int mip = settings.getMipmap() ? 2 : 0;
+	            this.shadowRawSamplers[i] = MetalBridge.samplerNew(this.ctx, 0, 0, filter, filter, mip, Float.MAX_VALUE);
+	            // GlSampler's bound comparison state overrides ShadowRenderer's texture state.
+	            this.shadowCompareSamplers[i] = MetalBridge.comparisonSamplerNew(this.ctx, 0, 0, filter, filter, mip, Float.MAX_VALUE, 3);
+	        }
+			if (resolver.has(ProgramId.Shadow) && shadowDirectives.isShadowEnabled().orElse(true)) {
+				if (shadowDirectives.getDepthSamplingSettings().stream().anyMatch(x -> x.getMipmap())) {
+	                throw new IllegalStateException("Shadow depth mipmaps require a Metal depth reduction pass");
+	            }
+	            int usage = MetalTargets.USAGE;
+				this.shadowDepth = MetalBridge.newTexture(this.ctx, 252, this.shadowResolution, this.shadowResolution, 1, usage);
+				this.shadowDepthNoTranslucents = MetalBridge.newTexture(this.ctx, 252, this.shadowResolution, this.shadowResolution, 1, usage);
+				for (int i = 0; i < this.shadowColors.length; i++) {
+					var settings = shadowDirectives.getColorSamplingSettings().get(i);
+					this.shadowColorFormats[i] = MetalTargets.pixelFormat(settings != null ? settings.getFormat() : net.irisshaders.iris.gl.texture.InternalTextureFormat.RGBA);
+					this.shadowColors[i] = MetalBridge.newTexture(this.ctx, this.shadowColorFormats[i], this.shadowResolution, this.shadowResolution, settings != null && settings.getMipmap() ? 32 - Integer.numberOfLeadingZeros(this.shadowResolution) : 1, usage);
+				}
+				ShadowRenderer renderer = new ShadowRenderer(this, resolver.resolveNullable(ProgramId.ShadowSolid), this.directives, null, null, this.customUniforms, false);
+				renderer.metalPreTranslucentDepth = () -> {
+					Object encoder = encoder();
+					MetalBridge.blitTextureToTexture(MetalBridge.enc(encoder), this.shadowDepth, this.shadowDepthNoTranslucents, 0, this.shadowResolution, this.shadowResolution);
+				};
+				this.shadowRenderer = renderer;
+			} else {
+				this.shadowRenderer = null;
+			}
+
+			this.customUniforms.optimise();
+			this.gbuffers = new MetalGbuffers(this);
+			MetalHooks.setRedirector(this.gbuffers);
+			Iris.logger.info("[Iris] Shader pack on Metal (mcopt), {} programs", this.programs.size());
+		} catch (RuntimeException | Error e) {
+			destroy();
+			throw e;
+		}
 	}
 
     private Pass copyFinalPass() {
@@ -312,9 +319,10 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 			throw new IllegalStateException(source.getName() + " has a geometry shader: Metal has none");
 		}
 		MetalProgram program = new MetalProgram(this.ctx, source.getName(), transformed.get(PatchShaderType.VERTEX), transformed.get(PatchShaderType.FRAGMENT));
+		this.programs.add(program);
 		CommonUniforms.addDynamicUniforms(program.uniforms, FogMode.OFF);
 		program.uniforms.attach(this.customUniforms);
-		this.programs.add(program);
+
 		return program;
 	}
 
@@ -750,10 +758,16 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 
 	// --- WorldRenderingPipeline ---
 
+	/** PipelineManager also calls this when revisiting a cached dimension. */
+	public void activate() {
+		if (this.destroyed) throw new IllegalStateException("Cannot activate a destroyed Metal pipeline");
+		MetalHooks.setRedirector(this.gbuffers);
+	}
+
 	@Override
 	public void addDebugText(DebugScreenDisplayer messages) {
 		if (this.shadowRenderer != null) this.shadowRenderer.addDebugText(messages);
-		messages.addLine("[Iris] Metal shader pipeline (mcopt), " + this.programs.size() + " programs");
+		messages.addLine(net.minecraft.network.chat.Component.translatable("iris.backend.metal.active").getString());
 	}
 
 	@Override
@@ -805,29 +819,30 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 
 	@Override
 	public void destroy() {
+		if (this.destroyed) return;
 		this.destroyed = true;
 		MetalHooks.setRedirector(null);
 		for (long sampler : this.shadowRawSamplers) MetalBridge.release(sampler);
 		for (long sampler : this.shadowCompareSamplers) MetalBridge.release(sampler);
-		this.horizonRenderer.destroy();
-		this.gbuffers.destroy();
+		if (this.horizonRenderer != null) this.horizonRenderer.destroy();
+		if (this.gbuffers != null) this.gbuffers.destroy();
 		this.programs.forEach(MetalProgram::destroy);
-		this.custom.destroy();
+		if (this.custom != null) this.custom.destroy();
 		this.programs.clear();
 		MetalBridge.release(this.centerDepth);
 		MetalBridge.release(this.centerDepthAlt);
-		this.targets.destroy();
+		if (this.targets != null) this.targets.destroy();
 		if (this.shadowRenderer != null) {
 			this.shadowRenderer.destroy();
-			MetalBridge.release(this.shadowDepth);
-			MetalBridge.release(this.shadowDepthNoTranslucents);
-			for (long c : this.shadowColors) if (c != 0) MetalBridge.release(c);
 		}
-		this.white.close();
-		this.defaultNormal.close();
-		this.defaultSpecular.close();
-		this.noise.close();
-		this.shadowDepthDummy.close();
+		MetalBridge.release(this.shadowDepth);
+		MetalBridge.release(this.shadowDepthNoTranslucents);
+		for (long c : this.shadowColors) if (c != 0) MetalBridge.release(c);
+		if (this.white != null) this.white.close();
+		if (this.defaultNormal != null) this.defaultNormal.close();
+		if (this.defaultSpecular != null) this.defaultSpecular.close();
+		if (this.noise != null) this.noise.close();
+		if (this.shadowDepthDummy != null) this.shadowDepthDummy.close();
 		MetalBridge.release(this.linearClamp);
 		MetalBridge.release(this.nearestClamp);
 		MetalBridge.release(this.linearRepeat);

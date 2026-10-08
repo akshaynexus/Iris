@@ -12,6 +12,18 @@ public final class MetalSupport {
 	private MetalSupport() {
 	}
 
+	public static boolean installed() {
+		return IrisPlatformHelpers.getInstance().isModLoaded("mcopt-metal");
+	}
+
+	/** Called after device initialization; configuration alone does not prove Metal won backend selection. */
+	public static boolean shaderPacksBlocked() {
+		if (!installed()) return false;
+		if (!IrisMixinPlugin.usingMetal) return true;
+		return !(com.mojang.blaze3d.systems.RenderSystem.getDevice() instanceof GpuDeviceAccessor device)
+			|| !device.getBackend().getClass().getName().equals("mcopt.metal.MetalDevice");
+	}
+
 	static boolean metalActive() {
 		try {
 			if (!IrisPlatformHelpers.getInstance().isModLoaded("mcopt-metal")) return false;

@@ -37,7 +37,7 @@ public class IrisConfig implements ConfigEntryPoint {
 	public static final Identifier COLOR = Identifier.fromNamespaceAndPath("iris", "textures/gui/config-icon.png");
     @Override
     public void registerConfigLate(ConfigBuilder builder) {
-        boolean vk = IrisMixinPlugin.usingVulkan || IrisMixinPlugin.usingMetal;
+        boolean vk = net.irisshaders.iris.mixin.MetalSupport.shaderPacksBlocked() || (IrisMixinPlugin.usingVulkan && !IrisMixinPlugin.usingMetal);
 
         var modOptions = builder.registerOwnModOptions()
                 .setName("Iris")
@@ -48,7 +48,7 @@ public class IrisConfig implements ConfigEntryPoint {
                         builder.createExternalPage()
                                 .setName(Component.translatable("options.iris.shaderPackSelection.title"))
                                 .setScreenConsumer(i ->
-                                        Minecraft.getInstance().gui.setScreen(vk ? new ShaderPackScreenPlaceholder(i) : new ShaderPackScreen(i)))
+                                        Minecraft.getInstance().gui.setScreen(vk ? new ShaderPackScreenPlaceholder(i) : ShaderPackScreenPlaceholder.create(i)))
                 );
 
         if (!vk) {
@@ -135,7 +135,7 @@ public class IrisConfig implements ConfigEntryPoint {
                                                 .setTooltip(Component.literal("Packs"))
                                                 .setName(Component.translatable("options.iris.shaderPackList"))
                                                 .setScreenConsumer(i ->
-                                                        Minecraft.getInstance().gui.setScreen(new ShaderPackScreen(i)))
+                                                        Minecraft.getInstance().gui.setScreen(ShaderPackScreenPlaceholder.create(i)))
                                 )
                 )
                 .addOptionGroup(

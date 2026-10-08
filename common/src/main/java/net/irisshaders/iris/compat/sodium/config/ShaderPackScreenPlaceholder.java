@@ -1,5 +1,8 @@
 package net.irisshaders.iris.compat.sodium.config;
 
+import net.irisshaders.iris.Iris;
+import net.irisshaders.iris.mixin.MetalSupport;
+import net.irisshaders.iris.gui.screen.ShaderPackScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.PreferredGraphicsApi;
 import net.minecraft.client.gui.ActiveTextCollector;
@@ -24,25 +27,42 @@ public class ShaderPackScreenPlaceholder extends Screen {
         parent = i;
     }
 
+    public static Screen create(Screen parent) {
+        return MetalSupport.shaderPacksBlocked()
+                ? new ShaderPackScreenPlaceholder(parent) : new ShaderPackScreen(parent);
+    }
+
     @Override
     protected void init() {
         super.init();
-        this.message = MultiLineLabel.create(this.font, Component.literal("Iris cannot run when using Vulkan. Would you like to switch to OpenGL?\nThis will close your game."), this.width - 50);
+        boolean metal = MetalSupport.installed();
+        boolean supported = !metal || mcopt.metal.PlatformCheck.isSupported();
+        this.confirmation = metal ? Component.translatable("iris.backend.switch") : Component.literal("Switch");
+        this.message = MultiLineLabel.create(this.font, metal ? Component.translatable(supported ? "iris.backend.metal.switch" : "iris.backend.metal.unsupported") : Component.literal("Iris cannot run when using Vulkan. Would you like to switch to OpenGL?\nThis will close your game."), this.width - 50);
         int textSize = (this.message.getLineCount() + 1) * 9;
 
-        this.addRenderableWidget(
-                Button.builder(this.confirmation, this::switchToVk)
+        if (supported) this.addRenderableWidget(
+                Button.builder(this.confirmation, this::switchBackend)
                         .bounds(this.width / 2 - 155, 100 + textSize, 150, 20)
                         .build()
         );
-        Button skipAndJoinButton = Button.builder(Component.literal("Return"), i -> onClose())
+        Button skipAndJoinButton = Button.builder(metal ? Component.translatable("iris.backend.return") : Component.literal("Return"), i -> onClose())
                 .bounds(this.width / 2 - 155 + 160, 100 + textSize, 150, 20)
                 .build();
         this.addRenderableWidget(skipAndJoinButton);
     }
 
-    private void switchToVk(Button button) {
-        Minecraft.getInstance().options.preferredGraphicsBackend().set(PreferredGraphicsApi.OPENGL);
+    private void switchBackend(Button button) {
+        if (MetalSupport.installed()) {
+            try {
+                mcopt.metal.Profile.selectMetal();
+            } catch (java.io.IOException e) {
+                Iris.logger.error("Could not save Metal backend selection", e);
+                this.message = MultiLineLabel.create(this.font, Component.translatable("iris.backend.metal.saveFailed"), this.width - 50);
+                return;
+            }
+        }
+        Minecraft.getInstance().options.preferredGraphicsBackend().set(MetalSupport.installed() ? PreferredGraphicsApi.DEFAULT : PreferredGraphicsApi.OPENGL);
         Minecraft.getInstance().options.save();
 
         if (Minecraft.getInstance().isLocalServer() && Minecraft.getInstance().getSingleplayerServer() != null) {

@@ -49,7 +49,7 @@ public class IrisApiV0Impl implements IrisApi {
 
 	@Override
 	public Object openMainIrisScreenObj(Object parent) {
-		return new ShaderPackScreen((Screen) parent);
+		return net.irisshaders.iris.compat.sodium.config.ShaderPackScreenPlaceholder.create((Screen) parent);
 	}
 
 	@Override

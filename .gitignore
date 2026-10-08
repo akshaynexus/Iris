@@ -53,3 +53,7 @@ spike/harness/classes/
 spike/harness/out/
 spike/harness/failures.txt
 docs/codex-*-last-message.md
+
+# Local launch command for the game harness (machine-specific)
+tools/game-harness/launch-command.txt
+tools/game-harness/runs/

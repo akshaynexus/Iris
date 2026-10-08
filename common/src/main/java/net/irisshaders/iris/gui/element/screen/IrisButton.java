@@ -35,8 +35,8 @@ public class IrisButton extends Button {
 		//guiGraphics.flush();
 		// TODO 1.21.6
 		//RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, this.isHoveredOrFocused() ? this.alphaSupplier.getAsFloat() * 1.8f : this.alphaSupplier.getAsFloat());
-		GlStateManager._enableBlend(0);
-		GlStateManager._enableDepthTest();
+		if (!net.irisshaders.iris.gl.IrisRenderSystem.METAL) GlStateManager._enableBlend(0);
+		if (!net.irisshaders.iris.gl.IrisRenderSystem.METAL) GlStateManager._enableDepthTest();
 		GuiUtil.bindIrisWidgetsTexture();
 		GuiUtil.drawButton(guiGraphics, this.getX(), this.getY(), this.getWidth(), this.getHeight(), this.isHoveredOrFocused(), !this.isActive());
 		//guiGraphics.flush();

@@ -44,6 +44,7 @@ public class PipelineManager {
 			pipeline = pipelinesPerDimension.get(currentDimension);
 		}
 
+		if (pipeline instanceof net.irisshaders.iris.metal.MetalPackPipeline metal) metal.activate();
 		return pipeline;
 	}
 
@@ -93,6 +94,7 @@ public class PipelineManager {
 	}
 
 	private void resetTextureState() {
+		if (net.irisshaders.iris.gl.IrisRenderSystem.METAL) return;
 		// Unbind all textures
 		//
 		// This is necessary because we don't want destroyed render target textures to remain bound to certain texture

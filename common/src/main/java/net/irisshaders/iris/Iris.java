@@ -211,7 +211,7 @@ public class Iris {
 				fallback = true;
 			}
 		} else if (shaderpackScreenKeybind.consumeClick()) {
-			minecraft.gui.setScreen(new ShaderPackScreen(null));
+			minecraft.gui.setScreen(net.irisshaders.iris.compat.sodium.config.ShaderPackScreenPlaceholder.create(null));
 		} else if (wireframeKeybind.consumeClick()) {
 			if (irisConfig.areDebugOptionsEnabled() && minecraft.player != null && !Minecraft.getInstance().isLocalServer()) {
 				minecraft.player.sendSystemMessage(Component.literal("No cheating; wireframe only in singleplayer!"));
@@ -241,6 +241,11 @@ public class Iris {
 			} else {
 				throw new NullPointerException("Iris.irisConfig was null unexpectedly");
 			}
+		}
+
+		if (net.irisshaders.iris.mixin.MetalSupport.shaderPacksBlocked()) {
+			setShadersDisabled();
+			return;
 		}
 
 		if (!irisConfig.areShadersEnabled()) {
@@ -427,7 +432,9 @@ public class Iris {
 		}
 
 		int success;
-		if (enable) {
+		if (IrisRenderSystem.METAL) {
+			success = 1;
+		} else if (enable) {
 			success = GLDebug.setupDebugMessageCallback();
 		} else {
 			GLDebug.reloadDebugState();
@@ -648,7 +655,7 @@ public class Iris {
 	}
 
 	private static WorldRenderingPipeline createPipeline(NamespacedId dimensionId) {
-		if (currentPack == null) {
+		if (net.irisshaders.iris.mixin.MetalSupport.shaderPacksBlocked() || currentPack == null) {
 			// Completely disables shader-based rendering
 			return new VanillaRenderingPipeline();
 		}
@@ -662,7 +669,7 @@ public class Iris {
 		} catch (Exception e) {
 			handleException(e);
 
-			ShaderStorageBufferHolder.forceDeleteBuffers();
+			if (!IrisRenderSystem.METAL) ShaderStorageBufferHolder.forceDeleteBuffers();
 			logger.error("Failed to create shader rendering pipeline, disabling shaders!", e);
 			// TODO: This should be reverted if a dimension change causes shaders to compile again
 			fallback = true;

@@ -146,9 +146,12 @@ public final class MetalGbuffers implements MetalHooks.PassRedirector, PassDeleg
 		Iris.logger.info("Metal: gbuffer passes draw into colortex {}", Arrays.toString(this.union));
 	}
 
+	private final List<MetalProgram> ownedPrograms = new ArrayList<>();
+
 	void destroy() {
 		this.bound.clear();
-		this.programs.values().forEach(p -> p.ifPresent(g -> g.program().destroy()));
+		this.ownedPrograms.forEach(MetalProgram::destroy);
+		this.ownedPrograms.clear();
 		this.programs.clear();
 		this.depthStates.values().forEach(MetalBridge::release);
 		MetalBridge.release(this.constants);
@@ -432,6 +435,7 @@ public final class MetalGbuffers implements MetalHooks.PassRedirector, PassDeleg
         int slot = java.util.Arrays.binarySearch(key.isShadow() ? this.shadowUnion : this.union, 0);
         MetalProgram program = new MetalProgram(this.pipeline.ctx, key.getName() + "_fallback", vertex, fragment,
             new int[] {slot}, Map.of());
+        this.ownedPrograms.add(program);
         program.uniforms.uniform1f(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.ONCE,
             "AlphaTestValue", () -> key.getAlphaTest().reference());
         program.uniforms.uniform1f(net.irisshaders.iris.gl.uniform.UniformUpdateFrequency.PER_FRAME,
@@ -478,6 +482,7 @@ public final class MetalGbuffers implements MetalHooks.PassRedirector, PassDeleg
 			}
 			MetalProgram program = new MetalProgram(this.pipeline.ctx, key.getName(), transformed.get(PatchShaderType.VERTEX),
 				transformed.get(PatchShaderType.FRAGMENT), remap, Map.of("iris_SodiumPushConstants", MetalBridge.firstReservedBufferSlot()));
+			this.ownedPrograms.add(program);
 			// The same uniform set ShaderCreator gives ExtendedShader on GL.
 			CommonUniforms.addDynamicUniforms(program.uniforms, FogMode.PER_VERTEX);
 			program.uniforms.attach(this.pipeline.customUniforms);

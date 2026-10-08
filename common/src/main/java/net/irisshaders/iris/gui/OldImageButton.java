@@ -114,7 +114,7 @@ public class OldImageButton extends Button {
 			lvInt12 = pInt5 + pInt6;
 		}
 
-		GlStateManager._enableDepthTest();
+		if (!net.irisshaders.iris.gl.IrisRenderSystem.METAL) GlStateManager._enableDepthTest();
 		pAbstractWidget0.blit(RenderPipelines.GUI_TEXTURED, pIdentifier1, pInt2, pInt3, (float) pInt4, (float) lvInt12, pInt7, pInt8, pInt9, pInt10);
 	}
 }

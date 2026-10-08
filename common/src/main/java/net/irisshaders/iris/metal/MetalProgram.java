@@ -24,7 +24,12 @@ final class MetalProgram {
 		this.name = name;
 		this.backend = new mcopt.metal.PackProgram(ctx, name, vertexGlsl, fragmentGlsl, outputRemap, fixedBuffers);
 		this.compiled = this.backend.compiled();
-		this.uniforms = new MetalUniforms(this.compiled);
+		try {
+			this.uniforms = new MetalUniforms(this.compiled);
+		} catch (RuntimeException | Error e) {
+			this.backend.close();
+			throw e;
+		}
 	}
 
 	/** The pipeline state for a descriptor in mc_pipeline_new's layout (see MetalBridge.pipelineNew). */

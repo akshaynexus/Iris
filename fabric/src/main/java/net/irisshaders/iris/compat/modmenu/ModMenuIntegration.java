@@ -7,6 +7,6 @@ import net.irisshaders.iris.gui.screen.ShaderPackScreen;
 public class ModMenuIntegration implements ModMenuApi {
 	@Override
 	public ConfigScreenFactory<?> getModConfigScreenFactory() {
-		return ShaderPackScreen::new;
+		return net.irisshaders.iris.compat.sodium.config.ShaderPackScreenPlaceholder::create;
 	}
 }
