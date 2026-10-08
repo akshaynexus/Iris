@@ -451,8 +451,8 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 				Vector4f c = s != null ? s.getClearColor() : new Vector4f(1, 1, 1, 1);
 				clears[i] = s == null || s.getClear() ? new float[] {c.x, c.y, c.z, c.w} : null;
 			}
-			// 0, as on GL (UndoReverseZFive turns Iris's clear to 1 into 0): the shadow pass tests GEQUAL.
-			MetalBridge.renderBegin(enc, this.shadowColors, clears, this.shadowDepth, true, 0.0f, this.shadowResolution, this.shadowResolution);
+			// Shadows use forward depth. Runtime GL readback confirms clear 1 and nearest-surface selection.
+			MetalBridge.renderBegin(enc, this.shadowColors, clears, this.shadowDepth, true, 1.0f, this.shadowResolution, this.shadowResolution);
 			this.shadowRenderer.renderShadows(worldRenderer, playerCamera, renderState);
             for (int i = 0; i < this.shadowColors.length; i++) {
                 var setting = settings.get(i);

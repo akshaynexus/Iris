@@ -266,9 +266,9 @@ public final class MetalGbuffers implements MetalHooks.PassRedirector, PassDeleg
 		}
 		boolean write = info.depthStencilState() != null && info.depthStencilState().writeDepth();
 		int gameCompare = MetalBridge.depthCompare(backend);
-		// The shadow pass keeps the game's own test: on GL, UndoReverseZThree and MixinGlRenderPipeline each flip it, so the
-		// shadow map ends up cleared to 0 and tested GEQUAL with the game's reversed-Z ops (MetalPackPipeline clears it to 0).
-		int compare = gameCompare;
+		// The game uses reverse depth, but the pack's shadow projection and comparison sampler use forward depth.
+		// Match the GL runtime: clear 1, retain the nearest shadow caster, and sample with LEQUAL.
+		int compare = this.shadow ? switch (gameCompare) { case 1 -> 4; case 3 -> 6; case 4 -> 1; case 6 -> 3; default -> gameCompare; } : gameCompare;
 		long state = this.depthStates.computeIfAbsent(compare * 2L + (write ? 1 : 0), k -> MetalBridge.depthStateNew(this.pipeline.ctx, compare, write));
 
 		// The game's uniforms land in the program's slots; the rest of the program's textures are the pack's.
@@ -453,7 +453,7 @@ public final class MetalGbuffers implements MetalHooks.PassRedirector, PassDeleg
 			if (key.patch == Patch.SODIUM) {
 				transformed = TransformPatcher.patchSodium(key.getName(), source.getVertexSource().orElseThrow(), source.getGeometrySource().orElse(null),
 					source.getTessControlSource().orElse(null), source.getTessEvalSource().orElse(null), source.getFragmentSource().orElseThrow(), alpha,
-					this.pipeline.getTextureMap(), this.pipeline.getTextureOverrides(TextureStage.GBUFFERS_AND_SHADOW), false);
+					this.pipeline.getTextureMap(), this.pipeline.getTextureOverrides(TextureStage.GBUFFERS_AND_SHADOW), key.isShadow());
 			} else {
 				ShaderAttributeInputs inputs = new ShaderAttributeInputs(vertexFormat, key.shouldIgnoreLightmap(), isLines, key.isGlint(), key.isText(), false);
 				transformed = TransformPatcher.patchVanilla(key.getName(), source.getVertexSource().orElseThrow(), source.getGeometrySource().orElse(null),
