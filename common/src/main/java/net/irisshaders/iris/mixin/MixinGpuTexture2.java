@@ -9,11 +9,13 @@ import org.spongepowered.asm.mixin.Mixin;
 public abstract class MixinGpuTexture2 implements GpuTextureInterface {
 	@Override
 	public int iris$getGlId() {
+		if (IrisMixinPlugin.usingMetal) return 0; // mcopt's Metal textures have no GL name
 		throw new AssertionError("Why.");
 	}
 
 	@Override
 	public void iris$markMipmapNonLinear() {
+		if (IrisMixinPlugin.usingMetal) return;
 		throw new AssertionError("Why.");
 	}
 }

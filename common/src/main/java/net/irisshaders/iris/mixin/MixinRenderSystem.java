@@ -25,7 +25,7 @@ public class MixinRenderSystem {
 	@Inject(method = "initRenderer", at = @At("RETURN"), remap = false)
 	private static void iris$onRendererInit(GpuDevice device, CallbackInfo ci) {
 		Iris.duringRenderSystemInit();
-		GLDebug.reloadDebugState();
+		if (!IrisRenderSystem.METAL) GLDebug.reloadDebugState();
 		IrisRenderSystem.initRenderer();
 		IrisSamplers.initRenderer();
 		Iris.onRenderSystemInit();

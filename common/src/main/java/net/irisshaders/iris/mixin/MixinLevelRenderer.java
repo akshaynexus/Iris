@@ -187,7 +187,7 @@ public abstract class MixinLevelRenderer {
 	@Group(name = "that", min = 1, max = 1)
 	@Inject(require = 0, method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;addMainPass(Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher$PreparedFrame;Lcom/mojang/renderpearl/api/buffers/GpuBufferSlice;Lnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;Z)V"))
 	private void iris$renderTerrainShadows(GraphicsResourceAllocator resourceAllocator, boolean renderOutline, CameraRenderState cameraState, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, boolean consistentDepthRequired, CallbackInfo ci) {
-		if (Iris.isPackInUseQuick()) {
+		if (Iris.isPackInUseQuick() || pipeline instanceof net.irisshaders.iris.metal.MetalPackPipeline) {
 			pipeline.renderShadows((LevelRendererAccessor) this, Minecraft.getInstance().gameRenderer.mainCamera(), this.levelRenderState.cameraRenderState);
 		}
 	}

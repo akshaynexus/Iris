@@ -32,6 +32,7 @@ public final class GLDebug {
 	 * @return 0 for failure, 1 for success, 2 for restart required.
 	 */
 	public static int setupDebugMessageCallback() {
+		if (IrisRenderSystem.METAL) return 0;
 		reloadDebugState();
 
 		return setupDebugMessageCallback(System.out);
@@ -77,6 +78,7 @@ public final class GLDebug {
 	}
 
 	public static int setupDebugMessageCallback(PrintStream stream) {
+		if (IrisRenderSystem.METAL) return 0;
 		GLCapabilities caps = GL.getCapabilities();
 		GL46C.glEnable(GL46C.GL_DEBUG_OUTPUT_SYNCHRONOUS);
 		if (caps.OpenGL43) {
@@ -163,6 +165,7 @@ public final class GLDebug {
 	}
 
 	public static int disableDebugMessages() {
+		if (IrisRenderSystem.METAL) return 0;
 		GLCapabilities caps = GL.getCapabilities();
 		if (caps.OpenGL43) {
 			GL43C.glDebugMessageCallback(null, 0L);
@@ -303,6 +306,7 @@ public final class GLDebug {
 	}
 
 	public static void reloadDebugState() {
+		if (IrisRenderSystem.METAL) return;
 		if (Iris.getIrisConfig().areDebugOptionsEnabled() && (GL.getCapabilities().GL_KHR_debug || GL.getCapabilities().OpenGL43)) {
 			debugState = new KHRDebugState();
 		} else {
@@ -311,14 +315,17 @@ public final class GLDebug {
 	}
 
 	public static void nameObject(int id, int object, String name) {
+		if (IrisRenderSystem.METAL) return;
 		debugState.nameObject(id, object, name);
 	}
 
 	public static void pushGroup(int id, String name) {
+		if (IrisRenderSystem.METAL) return;
 		debugState.pushGroup(id, name);
 	}
 
 	public static void popGroup() {
+		if (IrisRenderSystem.METAL) return;
 		debugState.popGroup();
 	}
 

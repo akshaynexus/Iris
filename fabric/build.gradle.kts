@@ -84,6 +84,8 @@ dependencies {
     compileOnly(project(path = ":common", configuration = "headersJar"))
 
     compileOnly(files(rootDir.resolve("DHApi.jar")))
+    // mcopt's Metal backend (MetalBridge, MetalHooks): the Metal shader runtime calls it directly. Build mcopt first.
+    compileOnly(files(rootDir.resolve("../mcopt/metal/build/libs/metal-0.2.0-alpha.2.jar")))
 }
 
 tasks.named("compileTestJava").configure {

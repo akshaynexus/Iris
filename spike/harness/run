@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/../.."
+export JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home
+classpath=$(cat spike/harness/cp.txt)
+mkdir -p spike/harness/classes
+"$JAVA_HOME/bin/javac" -cp "$classpath" -d spike/harness/classes spike/harness/MetalSpike.java spike/harness/MetalRuntimeCheck.java
+"$JAVA_HOME/bin/java" --enable-native-access=ALL-UNNAMED -cp "spike/harness/classes:$classpath" net.irisshaders.iris.metal.MetalSpike spike/patched spike/harness/failures.txt
+"$JAVA_HOME/bin/java" --enable-native-access=ALL-UNNAMED -cp "spike/harness/classes:$classpath" net.irisshaders.iris.metal.MetalRuntimeCheck

@@ -18,6 +18,8 @@ public class MixinGlRenderPass {
 		if (name.equals("Sampler0") || name.equals("u_BlockTex")) {
 			if (textureView != null && Iris.getPipelineManager().getPipelineNullable() instanceof IrisRenderingPipeline irp) {
 				irp.onSetAlbedoTex(textureView);
+			} else if (textureView != null && Iris.getPipelineManager().getPipelineNullable() instanceof net.irisshaders.iris.metal.MetalPackPipeline metal) {
+				metal.onSetAlbedoTex(textureView);
 			}
 		}
 	}

@@ -205,6 +205,8 @@ public class StandardMacros {
 	 * @see <a href="https://github.com/sp614x/optifine/blob/9c6a5b5326558ccc57c6490b66b3be3b2dc8cbef/OptiFineDoc/doc/shaders.txt#L705-L707">Optifine Doc for GLSL Version</a>
 	 */
 	public static String getGlVersion(int name) {
+		// mcopt's Metal backend: report what Apple's OpenGL offers (4.1), so packs pick paths without compute or SSBOs.
+		if (IrisRenderSystem.METAL) return "410";
 		String info = GlStateManager._getString(name);
 
 		Matcher matcher = SEMVER_PATTERN.matcher(Objects.requireNonNull(info));
@@ -325,6 +327,7 @@ public class StandardMacros {
 	 * @see <a href="https://github.com/sp614x/optifine/blob/9c6a5b5326558ccc57c6490b66b3be3b2dc8cbef/OptiFineDoc/doc/shaders.txt#L735-L738">Optifine Doc</a>
 	 */
 	public static Set<String> getGlExtensions() {
+		if (IrisRenderSystem.METAL) return Set.of();
 		// In OpenGL Core, we must use a new way of retrieving extensions.
 		int numExtensions = GlStateManager._getInteger(GL30C.GL_NUM_EXTENSIONS);
 

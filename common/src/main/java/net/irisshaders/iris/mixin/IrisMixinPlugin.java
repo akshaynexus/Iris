@@ -16,6 +16,8 @@ public class IrisMixinPlugin implements IMixinConfigPlugin {
     private static final Splitter OPTION_SPLITTER = Splitter.on(':').limit(2);
 
     public static boolean usingVulkan;
+    /** mcopt's Metal backend draws the game: like Vulkan, there is no GL context, so the GL-only mixins stay off. */
+    public static boolean usingMetal = MetalSupport.metalActive();
 
     static {
         BufferedReader reader = null;
@@ -67,9 +69,29 @@ public class IrisMixinPlugin implements IMixinConfigPlugin {
 		return "iris.refmap.json";
 	}
 
+	/**
+	 * Mixins that target Mojang's GL backend or call GL, by name relative to net.irisshaders.iris.mixin. On Metal every
+	 * other mixin applies: the Metal pipeline (net.irisshaders.iris.metal) relies on Iris's world-render hooks.
+	 */
+	private static final Set<String> GL_ONLY = Set.of(
+		"MixinGpuTexture", "MixinBooleanState", "MixinGlCommandEncoder", "MixinGlProgram", "MixinGlRenderPipeline",
+		"MixinGlStateManager", "MixinGlStateManager_BlendOverride", "MixinGlStateManager_DepthColorOverride",
+		"MixinGlStateManager_FramebufferBinding", "MixinShaderManager_Overrides", "MixinRenderPass", "MixinCompiledShaderProgram",
+		"MixinTextureUtil", "MixinUniform", "MixinWindow", "UndoReverseZOne", "UndoReverseZTwo", "UndoReverseZThree",
+		"UndoReverseZFour", "UndoReverseZFive", "statelisteners.BooleanStateAccessor", "statelisteners.MixinGlStateManager",
+		"texture.MixinGlStateManager", "vertices.MixinVertexFormat", "fantastic.FeatureRenderDispatcherAccessor",
+		"fantastic.MixinFireworkSparkParticle", "fantastic.MixinStationaryItemParticle", "fantastic.MixinTerrainParticle",
+		"fantastic.MixinParticleFeatureRenderer", "fantastic.MixinParticlesRenderState", "fantastic.MixinLevelRenderer");
+
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (mixinClassName.contains("VKOnly")) return usingVulkan;
+        if (mixinClassName.contains("MetalOnly")) return usingMetal;
+        if (mixinClassName.contains("VKOnly")) return usingVulkan && !usingMetal; // Metal runs the full Iris, keybinds included
+        if (usingMetal) {
+            String prefix = "net.irisshaders.iris.mixin.";
+            String name = mixinClassName.startsWith(prefix) ? mixinClassName.substring(prefix.length()) : mixinClassName;
+            return !GL_ONLY.contains(name);
+        }
 		return !usingVulkan;
 	}
 

@@ -44,3 +44,12 @@ run/
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Metal port spike: Complementary's patched shader sources (third-party), build output and local results
+spike/patched/
+spike/out/
+spike/mtlcheck
+spike/harness/classes/
+spike/harness/out/
+spike/harness/failures.txt
+docs/codex-*-last-message.md

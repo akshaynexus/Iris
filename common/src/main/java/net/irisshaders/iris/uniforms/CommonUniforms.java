@@ -10,6 +10,7 @@ import net.irisshaders.iris.gl.uniform.DynamicUniformHolder;
 import net.irisshaders.iris.gl.uniform.UniformHolder;
 import net.irisshaders.iris.layer.GbufferPrograms;
 import net.irisshaders.iris.mixin.GlStateManagerAccessor;
+import net.irisshaders.iris.gl.IrisRenderSystem;
 import net.irisshaders.iris.mixin.statelisteners.BooleanStateAccessor;
 import net.irisshaders.iris.mixin.texture.TextureAtlasAccessor;
 import net.irisshaders.iris.mixinterface.LocalPlayerInterface;
@@ -79,6 +80,7 @@ public final class CommonUniforms {
 		// the shader will always be setup (and therefore uniforms will be re-uploaded)
 		// after the texture is changed and before rendering starts.
 		uniforms.uniform2i("atlasSize", () -> {
+			if (IrisRenderSystem.METAL) return net.irisshaders.iris.metal.MetalPackPipeline.albedoSize();
 			int glId = Iris.getPipelineManager().getPipeline().map(i -> i.getAlbedoTex()).orElse(0);
 			if (glId == 0) return ZERO_VECTOR_2i;
 
@@ -96,6 +98,7 @@ public final class CommonUniforms {
 		uniforms.uniform1i("textureReloadCount", CapturedRenderingState.INSTANCE::getTextureReloadCount, StateUpdateNotifiers.bindTextureNotifier);
 
 		uniforms.uniform2i("gtextureSize", () -> {
+			if (IrisRenderSystem.METAL) return net.irisshaders.iris.metal.MetalPackPipeline.albedoSize();
 			int glId = Iris.getPipelineManager().getPipeline().map(i -> i.getAlbedoTex()).orElse(0);
 
 			TextureInfo info = TextureInfoCache.INSTANCE.getInfo(glId);
@@ -104,6 +107,7 @@ public final class CommonUniforms {
 		}, StateUpdateNotifiers.bindTextureNotifier);
 
 		uniforms.uniform4i("blendFunc", () -> {
+			if (IrisRenderSystem.METAL) return ZERO_VECTOR_4i; // blending lives in Metal pipeline states
 			GlStateManager.BlendState blend = GlStateManagerAccessor.getBLEND();
 
 			if (GlStateManagerAccessor.getBLEND_ENABLE()[0]) {

@@ -37,7 +37,7 @@ public class IrisConfig implements ConfigEntryPoint {
 	public static final Identifier COLOR = Identifier.fromNamespaceAndPath("iris", "textures/gui/config-icon.png");
     @Override
     public void registerConfigLate(ConfigBuilder builder) {
-        boolean vk = IrisMixinPlugin.usingVulkan;
+        boolean vk = IrisMixinPlugin.usingVulkan || IrisMixinPlugin.usingMetal;
 
         var modOptions = builder.registerOwnModOptions()
                 .setName("Iris")

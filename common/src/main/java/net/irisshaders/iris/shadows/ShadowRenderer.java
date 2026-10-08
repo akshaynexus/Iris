@@ -117,7 +117,9 @@ public class ShadowRenderer {
 	private final String debugStringOverall;
 	private final boolean separateHardwareSamplers;
 	private final boolean shouldRenderLightBlockEntities;
-	private final IrisRenderingPipeline pipeline;
+	private final net.irisshaders.iris.pipeline.WorldRenderingPipeline pipeline;
+	/** mcopt's Metal backend: copies the shadow depth before translucents (there are no GL shadow targets). */
+	public Runnable metalPreTranslucentDepth;
 	private boolean packHasVoxelization;
 	private FrustumHolder terrainFrustumHolder;
 	private FrustumHolder entityFrustumHolder;
@@ -129,7 +131,7 @@ public class ShadowRenderer {
 	private final SubmitNodeStorage submitNodeStorage;
 	private final FeatureRenderDispatcher featureRenderDispatcher;
 
-	public ShadowRenderer(IrisRenderingPipeline pipeline, ProgramSource shadow, PackDirectives directives,
+	public ShadowRenderer(net.irisshaders.iris.pipeline.WorldRenderingPipeline pipeline, ProgramSource shadow, PackDirectives directives,
 						  ShadowRenderTargets shadowRenderTargets, ShadowCompositeRenderer compositeRenderer, CustomUniforms customUniforms, boolean separateHardwareSamplers) {
 
 		this.pipeline = pipeline;
@@ -179,7 +181,7 @@ public class ShadowRenderer {
 		int processors = Runtime.getRuntime().availableProcessors();
 		this.buffers = new RenderBuffers(processors);
 
-		configureSamplingSettings(shadowDirectives);
+		if (shadowRenderTargets != null) configureSamplingSettings(shadowDirectives);
 
 		levelRenderState = new LevelRenderState();
 		submitNodeStorage = new SubmitNodeStorage();
@@ -383,7 +385,7 @@ public class ShadowRenderer {
 
 	public void setupShadowViewport() {
 		// Set up the viewport
-		GlStateManager._viewport(0, 0, resolution, resolution);
+		if (!IrisRenderSystem.METAL) GlStateManager._viewport(0, 0, resolution, resolution);
 	}
 
 	public void renderShadows(LevelRendererAccessor levelRenderer, Camera playerCamera, CameraRenderState renderState) {
@@ -513,7 +515,7 @@ public class ShadowRenderer {
 			// However, it only partially resolves issues of light leaking into caves.
 			//
 			// TODO: Better way of preventing light from leaking into places where it shouldn't
-			GlStateManager._disableCull();
+			if (!IrisRenderSystem.METAL) GlStateManager._disableCull();
 
 			ChunkSectionsToRender sections = new SodiumChunkSection(((LevelRendererExtension) levelRenderer).sodium$getWorldRenderer(),
 				((LevelRendererExtension) levelRenderer).sodium$getMatrices(), cameraX, cameraY, cameraZ);
@@ -539,7 +541,7 @@ public class ShadowRenderer {
 		pipeline.setPhase(WorldRenderingPhase.ENTITIES);
 
 			// Reset our viewport in case Sodium overrode it
-			GlStateManager._viewport(0, 0, resolution, resolution);
+			if (!IrisRenderSystem.METAL) GlStateManager._viewport(0, 0, resolution, resolution);
 
 			profiler.popPush("entities");
 
@@ -634,25 +636,25 @@ public class ShadowRenderer {
 
 		profiler.popPush("generate mipmaps");
 
-		generateMipmaps();
+		if (!IrisRenderSystem.METAL) generateMipmaps();
 
 		profiler.popPush("restore gl state");
 
 		// Restore backface culling
-		GlStateManager._enableCull();
+		if (!IrisRenderSystem.METAL) GlStateManager._enableCull();
 		((LevelRendererExtension) levelRenderer).sodium$setMatrices(playerMatrices);
 
 		// Restore the old viewport
-		GlStateManager._viewport(0, 0, client.gameRenderer.mainRenderTarget().width, client.gameRenderer.mainRenderTarget().height);
+		if (!IrisRenderSystem.METAL) GlStateManager._viewport(0, 0, client.gameRenderer.mainRenderTarget().width, client.gameRenderer.mainRenderTarget().height);
 
 		if (levelRenderer instanceof CullingDataCache) {
 			((CullingDataCache) levelRenderer).restoreState();
 		}
 
-		pipeline.removePhaseIfNeeded();
+		if (pipeline instanceof IrisRenderingPipeline irp) irp.removePhaseIfNeeded();
 
 		GLDebug.pushGroup(901, "shadowcomp");
-		compositeRenderer.renderAll();
+		if (compositeRenderer != null) compositeRenderer.renderAll();
 		GLDebug.popGroup();
 
 		levelRenderer.setRenderBuffers(playerBuffers);
@@ -784,7 +786,8 @@ public class ShadowRenderer {
 	private void copyPreTranslucentDepth(LevelRendererAccessor levelRenderer) {
 		Profiler.get().popPush("translucent depth copy");
 
-		targets.copyPreTranslucentDepth();
+		if (targets != null) targets.copyPreTranslucentDepth();
+		else if (metalPreTranslucentDepth != null) metalPreTranslucentDepth.run();
 	}
 
 	public void addDebugText(DebugScreenDisplayer messages) {

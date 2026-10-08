@@ -132,7 +132,9 @@ public class Iris {
 			return;
 		}
 
-		if (GL.getCapabilities().GL_KHR_parallel_shader_compile) {
+		if (IrisRenderSystem.METAL) {
+			// mcopt's Metal backend: no GL context.
+		} else if (GL.getCapabilities().GL_KHR_parallel_shader_compile) {
 			KHRParallelShaderCompile.glMaxShaderCompilerThreadsKHR(10);
 		} else if (GL.getCapabilities().GL_ARB_parallel_shader_compile) {
 			ARBParallelShaderCompile.glMaxShaderCompilerThreadsARB(10);
@@ -655,6 +657,7 @@ public class Iris {
 
 		// We use DeferredWorldRenderingPipeline on 1.16, and NewWorldRendering pipeline on 1.17 when rendering shaders.
 		try {
+			if (IrisRenderSystem.METAL) return new net.irisshaders.iris.metal.MetalPackPipeline(programs);
 			return new IrisRenderingPipeline(programs);
 		} catch (Exception e) {
 			handleException(e);
@@ -762,7 +765,8 @@ public class Iris {
 	}
 
 	public static boolean isPackInUseQuick() {
-		return getPipelineManager().getPipelineNullable() instanceof IrisRenderingPipeline;
+		WorldRenderingPipeline pipeline = getPipelineManager().getPipelineNullable();
+		return pipeline instanceof IrisRenderingPipeline || pipeline instanceof net.irisshaders.iris.metal.MetalPackPipeline;
 	}
 
 	public static void loadShaderpackWhenPossible() {

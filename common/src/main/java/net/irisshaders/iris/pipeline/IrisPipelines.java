@@ -17,9 +17,9 @@ import java.util.Map;
 import static net.irisshaders.iris.pipeline.programs.ShaderOverrides.isBlockEntities;
 
 public class IrisPipelines {
-	private static final Map<RenderPipeline, Function<IrisRenderingPipeline, ShaderKey>> coreShaderMap = new Object2ObjectArrayMap<>();
-	private static final Map<RenderPipeline, Function<IrisRenderingPipeline, ShaderKey>> coreShaderMapShadow = new Object2ObjectArrayMap<>();
-	private static final Function<IrisRenderingPipeline, ShaderKey> FAKE_FUNCTION = p -> null;
+	private static final Map<RenderPipeline, Function<WorldRenderingPipeline, ShaderKey>> coreShaderMap = new Object2ObjectArrayMap<>();
+	private static final Map<RenderPipeline, Function<WorldRenderingPipeline, ShaderKey>> coreShaderMapShadow = new Object2ObjectArrayMap<>();
+	private static final Function<WorldRenderingPipeline, ShaderKey> FAKE_FUNCTION = p -> null;
 
 	static {
 		assignToMain(RenderPipelines.SOLID_BLOCK, p -> ShaderKey.TERRAIN_SOLID);
@@ -139,7 +139,7 @@ public class IrisPipelines {
 	}
 
 	private static ShaderKey getText(Object p) {
-		IrisRenderingPipeline pipeline = (IrisRenderingPipeline) p;
+		WorldRenderingPipeline pipeline = (WorldRenderingPipeline) p;
 
 		if (HandRenderer.INSTANCE.isActive()) {
 			// In 1.21.11+, held map uses this.
@@ -152,7 +152,7 @@ public class IrisPipelines {
 	}
 
 	private static ShaderKey getTextIntensity(Object p) {
-		IrisRenderingPipeline pipeline = (IrisRenderingPipeline) p;
+		WorldRenderingPipeline pipeline = (WorldRenderingPipeline) p;
 
 		if (isBlockEntities(pipeline)) {
 			return (ShaderKey.TEXT_INTENSITY_BE);
@@ -161,9 +161,9 @@ public class IrisPipelines {
 		}
 	}
 
-	private static void assignToMain(RenderPipeline pipeline, Function<IrisRenderingPipeline, ShaderKey> o) {
+	private static void assignToMain(RenderPipeline pipeline, Function<WorldRenderingPipeline, ShaderKey> o) {
 		if (coreShaderMap.containsKey(pipeline)) {
-			Function<IrisRenderingPipeline, ShaderKey> current = coreShaderMap.get(pipeline);
+			Function<WorldRenderingPipeline, ShaderKey> current = coreShaderMap.get(pipeline);
 			ShaderKey currentKey = current.apply(null);
 			ShaderKey newKey = o.apply(null);
 			if (currentKey != newKey) {
@@ -174,7 +174,7 @@ public class IrisPipelines {
 		coreShaderMap.put(pipeline, o);
 	}
 
-	private static void assignToShadow(RenderPipeline pipeline, Function<IrisRenderingPipeline, ShaderKey> o) {
+	private static void assignToShadow(RenderPipeline pipeline, Function<WorldRenderingPipeline, ShaderKey> o) {
 		if (coreShaderMapShadow.containsKey(pipeline)) {
 			Iris.logger.warn("Pair already assigned: " + pipeline);
 		}
@@ -199,7 +199,7 @@ public class IrisPipelines {
 	}
 
 	private static ShaderKey getCutout(Object p) {
-		IrisRenderingPipeline pipeline = (IrisRenderingPipeline) p;
+		WorldRenderingPipeline pipeline = (WorldRenderingPipeline) p;
 
 		if (HandRenderer.INSTANCE.isActive()) {
 			return (HandRenderer.INSTANCE.isRenderingSolid() ? ShaderKey.HAND_CUTOUT_DIFFUSE : ShaderKey.HAND_WATER_DIFFUSE);
@@ -211,7 +211,7 @@ public class IrisPipelines {
 	}
 
 	private static ShaderKey getSolid(Object p) {
-		IrisRenderingPipeline pipeline = (IrisRenderingPipeline) p;
+		WorldRenderingPipeline pipeline = (WorldRenderingPipeline) p;
 
 		if (HandRenderer.INSTANCE.isActive()) {
 			return (HandRenderer.INSTANCE.isRenderingSolid() ? ShaderKey.HAND_CUTOUT : ShaderKey.HAND_TRANSLUCENT);
@@ -223,7 +223,7 @@ public class IrisPipelines {
 	}
 
 	private static ShaderKey getTranslucent(Object p) {
-		IrisRenderingPipeline pipeline = (IrisRenderingPipeline) p;
+		WorldRenderingPipeline pipeline = (WorldRenderingPipeline) p;
 
 		if (HandRenderer.INSTANCE.isActive()) {
 			return (HandRenderer.INSTANCE.isRenderingSolid() ? ShaderKey.HAND_CUTOUT_DIFFUSE : ShaderKey.HAND_WATER_DIFFUSE);
@@ -235,7 +235,7 @@ public class IrisPipelines {
 	}
 
 	@Nullable
-	public static ShaderKey getPipeline(IrisRenderingPipeline pipeline, RenderPipeline shader) {
+	public static ShaderKey getPipeline(WorldRenderingPipeline pipeline, RenderPipeline shader) {
         if (shader.getLocation().getNamespace().contains("sodium")) {
             if (shader.getColorTargetStates().get(0).blendFunction().isPresent()) {
                 return ShadowRenderingState.areShadowsCurrentlyBeingRendered() ? ShaderKey.SHADOW_SODIUM_TERRAIN_TRANSLUCENT : ShaderKey.SODIUM_TERRAIN_TRANSLUCENT;

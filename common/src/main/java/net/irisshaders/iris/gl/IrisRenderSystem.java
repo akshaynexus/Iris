@@ -43,6 +43,8 @@ import java.nio.IntBuffer;
  * This class is responsible for abstracting calls to OpenGL and asserting that calls are run on the render thread.
  */
 public class IrisRenderSystem {
+	/** mcopt's Metal backend draws the game: there is no GL context, so nothing here may call GL. */
+	public static final boolean METAL = net.irisshaders.iris.mixin.IrisMixinPlugin.usingMetal;
 	private static final int[] emptyArray = new int[SamplerLimits.get().getMaxTextureUnits()];
 	private static GpuBufferSlice backupProjection;
 	private static ProjectionMatrixBuffer perspectiveProjectionMatrixBuffer;
@@ -57,6 +59,11 @@ public class IrisRenderSystem {
 	private static final IntList textureToUnswizzle = new IntArrayList();
 
 	public static void initRenderer() {
+		if (METAL) {
+			// No GL; the shadow pass still swaps the projection through a frontend buffer.
+			perspectiveProjectionMatrixBuffer = new ProjectionMatrixBuffer("Iris shadow map projection");
+			return;
+		}
 		if (GL.getCapabilities().OpenGL45) {
 			dsaState = new DSACore();
 			Iris.logger.info("OpenGL 4.5 detected, enabling DSA.");
@@ -116,11 +123,13 @@ public class IrisRenderSystem {
 	}
 
 	public static void uniformMatrix4fv(int location, boolean transpose, FloatBuffer matrix) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.matrix(location, matrix); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniformMatrix4fv(location, transpose, matrix);
 	}
 
 	public static void uniformMatrix4fv(int location, boolean transpose, float[] matrix) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.matrix(location, matrix); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniformMatrix4fv(location, transpose, matrix);
 	}
@@ -130,37 +139,57 @@ public class IrisRenderSystem {
 		GL32C.glCopyTexImage2D(target, level, internalFormat, x, y, width, height, border);
 	}
 
+	/**
+	 * On mcopt's Metal backend there is no GL program: uniform writes go to the Metal program being set up (its
+	 * iris_Uniforms block, with location = member index). Every Iris uniform class writes through these methods.
+	 */
+	public static mcopt.metal.PackUniforms metalUniforms;
+
+
 	public static void uniform1f(int location, float v0) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.floats(location, v0); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniform1f(location, v0);
 	}
 
+	public static void uniform1i(int location, int v0) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.ints(location, v0); return; }
+		RenderSystem.assertOnRenderThread();
+		GL32C.glUniform1i(location, v0);
+	}
+
 	public static void uniform2f(int location, float v0, float v1) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.floats(location, v0, v1); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniform2f(location, v0, v1);
 	}
 
 	public static void uniform2i(int location, int v0, int v1) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.ints(location, v0, v1); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniform2i(location, v0, v1);
 	}
 
 	public static void uniform3f(int location, float v0, float v1, float v2) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.floats(location, v0, v1, v2); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniform3f(location, v0, v1, v2);
 	}
 
 	public static void uniform3i(int location, int v0, int v1, int v2) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.ints(location, v0, v1, v2); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniform3i(location, v0, v1, v2);
 	}
 
 	public static void uniform4f(int location, float v0, float v1, float v2, float v3) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.floats(location, v0, v1, v2, v3); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniform4f(location, v0, v1, v2, v3);
 	}
 
 	public static void uniform4i(int location, int v0, int v1, int v2, int v3) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.ints(location, v0, v1, v2, v3); return; }
 		RenderSystem.assertOnRenderThread();
 		GL32C.glUniform4i(location, v0, v1, v2, v3);
 	}
@@ -297,10 +326,12 @@ public class IrisRenderSystem {
 	}
 
 	public static boolean supportsSSBO() {
+		if (METAL) return false; // not on the Metal port yet (phase 7)
 		return GL.getCapabilities().OpenGL44 || (GL.getCapabilities().GL_ARB_shader_storage_buffer_object && GL.getCapabilities().GL_ARB_buffer_storage);
 	}
 
 	public static boolean supportsImageLoadStore() {
+		if (METAL) return false; // not on the Metal port yet (phase 7)
 		return GL.getCapabilities().glBindImageTexture != 0L || GL.getCapabilities().OpenGL42 || ((GL.getCapabilities().GL_ARB_shader_image_load_store || GL.getCapabilities().GL_EXT_shader_image_load_store) && GL.getCapabilities().GL_ARB_buffer_storage);
 	}
 
@@ -333,6 +364,7 @@ public class IrisRenderSystem {
 	}
 
 	public static boolean supportsBufferBlending() {
+		if (METAL) return true; // Metal blends per attachment
 		return GL.getCapabilities().GL_ARB_draw_buffers_blend || GL.getCapabilities().OpenGL40;
 	}
 
@@ -492,6 +524,7 @@ public class IrisRenderSystem {
 	}
 
 	public static void setPolygonMode(int mode) {
+		if (METAL) return;
 		if (mode != polygonMode) {
 			polygonMode = mode;
 			GL43C.glPolygonMode(GL43C.GL_FRONT_AND_BACK, mode);
@@ -558,11 +591,13 @@ public class IrisRenderSystem {
 	}
 
 	public static void uniformMatrix3fv(int index, boolean b, FloatBuffer buf) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.matrix(index, buf); return; }
 		RenderSystem.assertOnRenderThread();
 		GL46C.glUniformMatrix3fv(index, b, buf);
 	}
 
 	public static void uniformMatrix3fv(int index, boolean b, float[] buf) {
+		if (METAL) { if (metalUniforms != null) metalUniforms.matrix(index, buf); return; }
 		RenderSystem.assertOnRenderThread();
 		GL46C.glUniformMatrix3fv(index, b, buf);
 	}

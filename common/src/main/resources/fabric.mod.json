@@ -58,6 +58,7 @@
     "immersive_portals": "<=1.4.2"
   },
   "custom": {
+    "mcopt:metal": 1,
     "sodium:options": {
       "mixin.features.render.world.sky": false
     },

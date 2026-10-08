@@ -39,15 +39,15 @@ public class ShaderOverrides {
 		}
 	}
 
-	public static boolean isBlockEntities(IrisRenderingPipeline pipeline) {
+	public static boolean isBlockEntities(net.irisshaders.iris.pipeline.WorldRenderingPipeline pipeline) {
 		return pipeline != null && pipeline.getPhase() == WorldRenderingPhase.BLOCK_ENTITIES;
 	}
 
-	public static boolean isEntities(IrisRenderingPipeline pipeline) {
+	public static boolean isEntities(net.irisshaders.iris.pipeline.WorldRenderingPipeline pipeline) {
 		return pipeline != null && pipeline.getPhase() == WorldRenderingPhase.ENTITIES;
 	}
 
-	public static boolean isSky(IrisRenderingPipeline pipeline) {
+	public static boolean isSky(net.irisshaders.iris.pipeline.WorldRenderingPipeline pipeline) {
 		if (pipeline != null) {
 			return switch (pipeline.getPhase()) {
 				case CUSTOM_SKY, SKY, SUNSET, SUN, STARS, VOID, MOON -> true;
@@ -61,7 +61,7 @@ public class ShaderOverrides {
 	// ignored: getRendertypeEndGatewayShader (we replace the end portal rendering for shaders)
 	// ignored: getRendertypeEndPortalShader (we replace the end portal rendering for shaders)
 
-	public static boolean isPhase(IrisRenderingPipeline pipeline, WorldRenderingPhase phase) {
+	public static boolean isPhase(net.irisshaders.iris.pipeline.WorldRenderingPipeline pipeline, WorldRenderingPhase phase) {
 		if (pipeline != null) {
 			return pipeline.getPhase() == phase;
 		} else {
