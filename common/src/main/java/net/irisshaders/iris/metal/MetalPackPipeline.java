@@ -384,6 +384,7 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 			Minecraft.getInstance().levelExtractor.allChanged();
 			this.initializedBlockIds = true;
 		}
+		this.dumpedThisFrame = false;
 		this.mipSampling.clear();
 		this.isBeforeTranslucent = true;
 		this.updateNotifier.onNewFrame();
@@ -478,11 +479,50 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 		copyDepth(this.targets.noHand);
 	}
 
+	private static java.nio.file.Path dumpRequest;
+	private int dumpStage;
+	private boolean dumpedThisFrame;
+	/** Harness entry point. Stages are sampled on successive frames to bound staging memory. */
+	public static java.util.Map<String, Object> requestDump(java.nio.file.Path directory) {
+		if (!Boolean.getBoolean("harness.enabled")) throw new IllegalStateException("Harness disabled");
+		if (dumpRequest != null || MetalDump.PENDING.get() != 0) throw new IllegalStateException("Dump already pending");
+		MetalDump.error = null;
+		dumpRequest = directory;
+		return java.util.Map.of("ok", true, "path", directory.toString(), "status", "queued");
+	}
+
+	public static java.util.Map<String, Object> dumpStatus() {
+		return java.util.Map.of("ok", MetalDump.error == null, "complete", dumpRequest == null && MetalDump.PENDING.get() == 0, "pending", MetalDump.PENDING.get(), "error", MetalDump.error == null ? "" : MetalDump.error);
+	}
+
+	private void dumpStage(String name, int stage, java.util.Set<Integer> readsAlt) {
+		if (dumpRequest == null || dumpStage != stage || dumpedThisFrame) return;
+		dumpedThisFrame = true;
+		java.nio.file.Path dir = dumpRequest.resolve(name);
+		Object encoder = encoder();
+		for (MetalTargets.Target t : this.targets.targets) {
+			MetalDump.texture(encoder, t.main, t.mtlFormat, t.width, t.height, dir.resolve("colortex" + t.index + "-main" + (!readsAlt.contains(t.index) ? "-read" : "") + ".png"));
+			MetalDump.texture(encoder, t.alt, t.mtlFormat, t.width, t.height, dir.resolve("colortex" + t.index + "-alt" + (readsAlt.contains(t.index) ? "-read" : "") + ".png"));
+		}
+		GpuTexture depth = main().getDepthTexture();
+		MetalBridge.flushClear(encoder, depth);
+		MetalDump.texture(encoder, MetalBridge.textureHandle(depth), this.targets.depthFormat, this.targets.width, this.targets.height, dir.resolve("depthtex0.png"));
+		MetalDump.texture(encoder, this.targets.noTranslucents, this.targets.depthFormat, this.targets.width, this.targets.height, dir.resolve("depthtex1.png"));
+		MetalDump.texture(encoder, this.targets.noHand, this.targets.depthFormat, this.targets.width, this.targets.height, dir.resolve("depthtex2.png"));
+		MetalDump.texture(encoder, this.shadowDepth, 252, this.shadowResolution, this.shadowResolution, dir.resolve("shadowtex0.png"));
+		MetalDump.texture(encoder, this.shadowDepthNoTranslucents, 252, this.shadowResolution, this.shadowResolution, dir.resolve("shadowtex1.png"));
+		for (int i = 0; i < 2; i++) MetalDump.texture(encoder, this.shadowColors[i], this.shadowColorFormats[i], this.shadowResolution, this.shadowResolution, dir.resolve("shadowcolor" + i + ".png"));
+		dumpStage++;
+		if (dumpStage == 3) { dumpRequest = null; dumpStage = 0; }
+	}
+
 	@Override
 	public void beginTranslucents() {
 		if (this.destroyed) throw new IllegalStateException("Tried to use a destroyed world rendering pipeline");
 		copyDepth(this.targets.noTranslucents);
+		dumpStage("after-gbuffers-opaque", 0, this.flippedAfterPrepare);
 		run(encoder(), this.deferred);
+		dumpStage("after-deferred", 1, this.flippedAfterTranslucent);
 		this.isBeforeTranslucent = false;
 	}
 
@@ -498,6 +538,7 @@ public final class MetalPackPipeline implements WorldRenderingPipeline {
 		this.isRenderingWorld = false;
 		Object encoder = encoder();
 		run(encoder, this.composite);
+		dumpStage("after-composite", 2, this.finalPass != null ? this.finalPass.readsAlt : java.util.Set.of());
 		long enc = MetalBridge.enc(encoder);
 		RenderTarget main = main();
 		GpuTexture color = main.getColorTexture();

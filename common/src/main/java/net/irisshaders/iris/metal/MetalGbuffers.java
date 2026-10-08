@@ -209,10 +209,12 @@ public final class MetalGbuffers implements MetalHooks.PassRedirector, PassDeleg
 		RenderPipeline renderPipeline = PIPELINES.get(backend);
 		BackendRenderPipeline.CreateInfo info = MetalBridge.createInfo(backend);
 		if (renderPipeline == null || info == null) {
+			warnOnce("Unmapped device pipeline: " + (info == null ? backend : info.name()));
 			return passthrough(enc, backend, uniforms);
 		}
 		ShaderKey key = IrisPipelines.getPipeline(this.pipeline, renderPipeline);
 		if (key == null) {
+			warnOnce("No shader key for " + renderPipeline.getLocation());
 			return passthrough(enc, backend, uniforms);
 		}
 		Gbuffer g = this.programs.computeIfAbsent(key, this::create).orElse(null);

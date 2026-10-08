@@ -1,0 +1,100 @@
+[
+  {
+    "name": "noon-terrain",
+    "position": [
+      -1040,
+      90,
+      224
+    ],
+    "yaw": 0,
+    "pitch": 25,
+    "time": 6000,
+    "weather": "clear",
+    "warmup_frames": 240,
+    "sample_frames": 300
+  },
+  {
+    "name": "water-reflections",
+    "position": [
+      -1000,
+      64,
+      260
+    ],
+    "yaw": 90,
+    "pitch": 10,
+    "time": 6000,
+    "weather": "clear",
+    "warmup_frames": 240,
+    "sample_frames": 300
+  },
+  {
+    "name": "forest-shade",
+    "position": [
+      -1040,
+      68,
+      250
+    ],
+    "yaw": 0,
+    "pitch": 0,
+    "time": 6000,
+    "weather": "clear",
+    "warmup_frames": 240,
+    "sample_frames": 300
+  },
+  {
+    "name": "sunset-sky",
+    "position": [
+      -1000,
+      70,
+      260
+    ],
+    "yaw": 90,
+    "pitch": 0,
+    "time": 12000,
+    "weather": "clear",
+    "warmup_frames": 240,
+    "sample_frames": 300
+  },
+  {
+    "name": "night-sky",
+    "position": [
+      -1000,
+      70,
+      260
+    ],
+    "yaw": 0,
+    "pitch": -30,
+    "time": 18000,
+    "weather": "clear",
+    "warmup_frames": 240,
+    "sample_frames": 300
+  },
+  {
+    "name": "cave-low-light",
+    "position": [
+      -1070,
+      41,
+      250
+    ],
+    "yaw": 90,
+    "pitch": 5,
+    "time": 18000,
+    "weather": "clear",
+    "warmup_frames": 240,
+    "sample_frames": 300
+  },
+  {
+    "name": "underwater",
+    "position": [
+      -1000,
+      59,
+      260
+    ],
+    "yaw": 90,
+    "pitch": 0,
+    "time": 6000,
+    "weather": "clear",
+    "warmup_frames": 240,
+    "sample_frames": 300
+  }
+]

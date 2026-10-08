@@ -1,0 +1,10 @@
+plugins { id 'net.fabricmc.fabric-loom' version '1.17.20' }
+version = '1.0.0'
+repositories { mavenCentral() }
+dependencies {
+ minecraft 'com.mojang:minecraft:26.3'
+ implementation 'net.fabricmc:fabric-loader:0.19.3'
+ implementation 'net.fabricmc.fabric-api:fabric-api:0.160.5+26.3'
+}
+java { toolchain.languageVersion = JavaLanguageVersion.of(26) }
+tasks.withType(JavaCompile).configureEach { options.release = 25 }
