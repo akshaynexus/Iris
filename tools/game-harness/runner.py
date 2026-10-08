@@ -29,6 +29,7 @@ def prepare(backend, run, mode, profile, trace, preset, properties):
     real = preset == "real"
     width, height = (2880, 1864) if real else (1280, 720)
     render, simulation, shadow = (16, 12, 32) if real else (8, 5, 8)
+    shadow = int(os.environ.get('HARNESS_SHADOW', shadow))  # override for shadow-distance experiments
     game = INSTANCES / f'IrisHarness-{backend}'
     game.mkdir(exist_ok=True)
     # This directory is owned by the harness; source instance is read-only here.
